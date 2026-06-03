@@ -9,7 +9,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +43,68 @@ private fun LazyListState.centeredItemIndex(): Int {
         .minByOrNull { item -> abs((item.offset + item.size / 2) - viewportCenter) }
         ?.index
         ?: firstVisibleItemIndex
+}
+
+@Composable
+fun WheelPickerField(
+    label: String,
+    items: List<String>,
+    selectedIndex: Int,
+    onConfirm: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (items.isEmpty()) return
+    val safeIndex = selectedIndex.coerceIn(0, items.lastIndex)
+    var showDialog by remember { mutableStateOf(false) }
+    var draftIndex by remember(safeIndex) { mutableIntStateOf(safeIndex) }
+
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = Typography.bodySmall,
+            color = OnSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SurfaceContainer, RoundedCornerShape(12.dp))
+                .clickable {
+                    draftIndex = safeIndex
+                    showDialog = true
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(items[safeIndex], style = Typography.bodyLarge, color = OnSurface, modifier = Modifier.weight(1f))
+            Text("Change", style = Typography.labelMedium, color = Primary)
+        }
+    }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(label, color = Primary) },
+            text = {
+                WheelPicker(
+                    items = items,
+                    selectedIndex = draftIndex,
+                    onSelected = { draftIndex = it },
+                    label = null
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onConfirm(draftIndex)
+                    showDialog = false
+                }) { Text("Select") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable

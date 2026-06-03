@@ -24,6 +24,24 @@ interface GymDao {
     @Update
     suspend fun updateSet(exerciseSet: ExerciseSet)
 
+    @androidx.room.Delete
+    suspend fun deleteSet(exerciseSet: ExerciseSet)
+
+    @Query("DELETE FROM exercise_sets WHERE exerciseName = :name AND workoutDayLabel = :dayLabel AND timestamp >= :dayStart AND timestamp < :dayEnd")
+    suspend fun deleteExerciseForDay(name: String, dayLabel: String, dayStart: Long, dayEnd: Long)
+
+    @Query("SELECT * FROM custom_exercises ORDER BY createdAt DESC")
+    fun getAllCustomExercises(): Flow<List<CustomExercise>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCustomExercise(exercise: CustomExercise): Long
+
+    @androidx.room.Delete
+    suspend fun deleteCustomExercise(exercise: CustomExercise)
+
+    @Query("SELECT * FROM meals WHERE timestamp >= :dayStart AND timestamp < :dayEnd ORDER BY timestamp DESC")
+    fun getMealsForDay(dayStart: Long, dayEnd: Long): Flow<List<MealEntry>>
+
     @Query("SELECT * FROM meals ORDER BY timestamp DESC")
     fun getAllMeals(): Flow<List<MealEntry>>
 

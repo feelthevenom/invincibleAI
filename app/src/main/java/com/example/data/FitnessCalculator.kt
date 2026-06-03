@@ -206,6 +206,23 @@ object FitnessCalculator {
         return (diff / weeklyChange).roundToInt().coerceAtLeast(1)
     }
 
+    /** Daily calorie adjustment from weekly weight-change target (negative = deficit). */
+    fun calorieAdjustmentFromWeeklyChange(goal: String, weeklyChangeKg: Float): Int {
+        if (weeklyChangeKg <= 0f || goal == "Maintain Weight") return 0
+        val daily = ProfileValidation.estimatedDailyDeficitForWeeklyChange(weeklyChangeKg)
+        return when (goal) {
+            "Lose Fat" -> -daily
+            "Gain Muscle" -> daily
+            "Body Recomposition" -> -(daily / 2)
+            else -> -daily
+        }
+    }
+
+    fun dailyCaloriesFromWeeklyChange(maintenanceCalories: Int, goal: String, weeklyChangeKg: Float): Int {
+        val adjustment = calorieAdjustmentFromWeeklyChange(goal, weeklyChangeKg)
+        return (maintenanceCalories + adjustment).coerceAtLeast(1200)
+    }
+
     /** Daily calorie adjustment: negative = deficit, positive = surplus. */
     fun calorieAdjustmentDaily(maintenanceCalories: Int, targetCalories: Int): Int {
         return targetCalories - maintenanceCalories

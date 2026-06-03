@@ -1,5 +1,8 @@
 package com.example
 
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.example.ui.theme.MyApplicationTheme
@@ -25,4 +28,12 @@ class GreetingScreenshotTest {
 
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/greeting.png")
   }
+}
+
+@Composable
+fun Greeting(name: String, modifier: Modifier = Modifier) {
+  Text(
+    text = "Hello $name!",
+    modifier = modifier
+  )
 }

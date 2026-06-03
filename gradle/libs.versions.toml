@@ -40,6 +40,7 @@ firebaseBom = "34.12.0"
 secretsGradlePlugin = "2.0.1"
 generativeAi = "0.9.0"
 mediapipeGenai = "0.10.18"
+litertLm = "0.11.0"
 biometric = "1.1.0"
 securityCrypto = "1.1.0-alpha06"
 
@@ -93,6 +94,7 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-ai = { group = "com.google.firebase", name = "firebase-ai" }
 generativeai = { group = "com.google.ai.client.generativeai", name = "generativeai", version.ref = "generativeAi" }
 mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
+litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertLm" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto-ktx", version.ref = "securityCrypto" }
 

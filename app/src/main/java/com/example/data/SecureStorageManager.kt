@@ -33,7 +33,33 @@ class SecureStorageManager(context: Context) {
         sharedPreferences.edit().remove(KEY_GEMINI_API).apply()
     }
 
+    fun getHuggingFaceToken(): String? {
+        return sharedPreferences.getString(KEY_HF_TOKEN, null)
+    }
+
+    fun saveHuggingFaceToken(token: String) {
+        sharedPreferences.edit().putString(KEY_HF_TOKEN, token).apply()
+    }
+
+    fun clearHuggingFaceToken() {
+        sharedPreferences.edit().remove(KEY_HF_TOKEN).apply()
+    }
+
+    fun getGroqApiKey(): String? {
+        return sharedPreferences.getString(KEY_GROQ_API, null)
+    }
+
+    fun saveGroqApiKey(apiKey: String) {
+        sharedPreferences.edit().putString(KEY_GROQ_API, apiKey).apply()
+    }
+
+    fun clearGroqApiKey() {
+        sharedPreferences.edit().remove(KEY_GROQ_API).apply()
+    }
+
     companion object {
         private const val KEY_GEMINI_API = "gemini_api_key"
+        private const val KEY_HF_TOKEN = "huggingface_token"
+        private const val KEY_GROQ_API = "groq_api_key"
     }
 }

@@ -9,23 +9,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.GymViewModel
+import com.example.data.DietDateUtils
 import com.example.data.MealEntry
 import com.example.data.MealTypes
 import com.example.data.UserProfile
 import com.example.ui.theme.*
-import java.util.Calendar
+
+private enum class DietDateTab { Yesterday, Today, Calendar }
 
 @Composable
 fun DietTab(viewModel: GymViewModel) {
@@ -41,11 +45,28 @@ fun DietTabContent(
     viewModel: GymViewModel? = null
 ) {
     var selectedMealType by remember { mutableStateOf<String?>(null) }
-    val todayStart = remember { startOfTodayMillis() }
-    val todayMeals = remember(meals, todayStart) { meals.filter { it.timestamp >= todayStart } }
+    var dateTab by remember { mutableStateOf(DietDateTab.Today) }
+    var selectedDayStart by remember { mutableLongStateOf(DietDateUtils.startOfTodayMillis()) }
+    var showCalendar by remember { mutableStateOf(false) }
+
+    LaunchedEffect(dateTab) {
+        selectedDayStart = when (dateTab) {
+            DietDateTab.Yesterday -> DietDateUtils.startOfYesterdayMillis()
+            DietDateTab.Today -> DietDateUtils.startOfTodayMillis()
+            DietDateTab.Calendar -> selectedDayStart
+        }
+    }
+
+    val dayMeals = remember(meals, selectedDayStart) {
+        DietDateUtils.mealsForDay(meals, selectedDayStart)
+    }
+    val daySummaries = remember(meals, profile.dailyCalories) {
+        DietDateUtils.summarizeDays(meals, profile.dailyCalories.coerceAtLeast(1))
+    }
+    val isToday = DietDateUtils.isToday(selectedDayStart)
 
     val dailyGoal = profile.dailyCalories.coerceAtLeast(1)
-    val totalConsumed = todayMeals.sumOf { it.calories }
+    val totalConsumed = dayMeals.sumOf { it.calories }
     val remaining = (dailyGoal - totalConsumed).coerceAtLeast(0)
     val dailyProgress = if (dailyGoal > 0) (totalConsumed.toFloat() / dailyGoal).coerceIn(0f, 1f) else 0f
 
@@ -56,37 +77,64 @@ fun DietTabContent(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(SurfaceContainerLow, RoundedCornerShape(12.dp))
                 .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "Yesterday",
-                style = Typography.bodySmall,
-                color = OnSurfaceVariant.copy(0.6f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-            Box(Modifier.background(PrimaryContainer, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    "Today",
-                    style = Typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = OnPrimaryContainer
+            val tabModifier = @Composable { tab: DietDateTab, label: String ->
+                val isSelected = dateTab == tab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) PrimaryContainer else Color.Transparent)
+                        .clickable {
+                            dateTab = tab
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        style = Typography.bodyMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        ),
+                        color = if (isSelected) OnPrimaryContainer else OnSurfaceVariant.copy(0.6f)
+                    )
+                }
+            }
+
+            tabModifier(DietDateTab.Yesterday, "Yesterday")
+            tabModifier(DietDateTab.Today, "Today")
+
+            IconButton(
+                onClick = {
+                    dateTab = DietDateTab.Calendar
+                    showCalendar = true
+                },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    Icons.Default.CalendarMonth,
+                    contentDescription = "Calendar",
+                    tint = if (dateTab == DietDateTab.Calendar) Primary else OnSurfaceVariant.copy(0.6f)
                 )
             }
-            Text(
-                "Calendar",
-                style = Typography.bodySmall,
-                color = OnSurfaceVariant.copy(0.6f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
         }
+
+        Text(
+            DietDateUtils.formatDisplayDate(selectedDayStart),
+            style = Typography.titleMedium,
+            color = if (isToday) OnSurface else Error,
+            modifier = Modifier.padding(start = 4.dp)
+        )
 
         Box(
             modifier = Modifier
@@ -133,7 +181,7 @@ fun DietTabContent(
         Text("MEALS", style = Typography.labelMedium, color = OnSurfaceVariant)
 
         budgets.forEach { budget ->
-            val mealEntries = todayMeals.filter { it.mealType == budget.mealType }
+            val mealEntries = dayMeals.filter { it.mealType == budget.mealType }
             val kcal = mealEntries.sumOf { it.calories }
             val pro = mealEntries.sumOf { it.protein }
             val carb = mealEntries.sumOf { it.carbs }
@@ -167,28 +215,33 @@ fun DietTabContent(
         }
     }
 
+    if (showCalendar) {
+        DietCalendarDialog(
+            selectedDayStart = selectedDayStart,
+            daySummaries = daySummaries,
+            onDismiss = { showCalendar = false },
+            onDaySelected = { day ->
+                selectedDayStart = day
+                dateTab = DietDateTab.Calendar
+                showCalendar = false
+            }
+        )
+    }
+
     selectedMealType?.let { mealType ->
         val budget = budgets.first { it.mealType == mealType }
-        val entries = todayMeals.filter { it.mealType == mealType }
+        val entries = dayMeals.filter { it.mealType == mealType }
         if (viewModel != null) {
             MealDetailOverlay(
                 mealType = mealType,
                 budget = budget,
                 entries = entries,
+                logDayStart = selectedDayStart,
                 viewModel = viewModel,
                 onDismiss = { selectedMealType = null }
             )
         }
     }
-}
-
-fun startOfTodayMillis(): Long {
-    return Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
 }
 
 @Preview(showBackground = true)
@@ -207,6 +260,8 @@ fun DietTabPreview() {
         )
     }
 }
+
+// MealCard and MiniMacroBar below
 
 @Composable
 fun MealCard(
@@ -281,34 +336,10 @@ fun MealCard(
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MiniMacroBar(
-                        "PRO",
-                        "${protein.first}g",
-                        Primary,
-                        macroProgress(protein.first, protein.second),
-                        Modifier.weight(1f)
-                    )
-                    MiniMacroBar(
-                        "CAR",
-                        "${carbs.first}g",
-                        Tertiary,
-                        macroProgress(carbs.first, carbs.second),
-                        Modifier.weight(1f)
-                    )
-                    MiniMacroBar(
-                        "FAT",
-                        "${fat.first}g",
-                        Error,
-                        macroProgress(fat.first, fat.second),
-                        Modifier.weight(1f)
-                    )
-                    MiniMacroBar(
-                        "FIB",
-                        "${fiber.first}g",
-                        Secondary,
-                        macroProgress(fiber.first, fiber.second),
-                        Modifier.weight(1f)
-                    )
+                    MiniMacroBar("PRO", "${protein.first}g", Primary, macroProgress(protein.first, protein.second), Modifier.weight(1f))
+                    MiniMacroBar("CAR", "${carbs.first}g", Tertiary, macroProgress(carbs.first, carbs.second), Modifier.weight(1f))
+                    MiniMacroBar("FAT", "${fat.first}g", Error, macroProgress(fat.first, fat.second), Modifier.weight(1f))
+                    MiniMacroBar("FIB", "${fiber.first}g", Secondary, macroProgress(fiber.first, fiber.second), Modifier.weight(1f))
                 }
                 Spacer(Modifier.width(16.dp))
                 Box(

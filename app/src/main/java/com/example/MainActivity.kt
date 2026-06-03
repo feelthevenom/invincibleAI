@@ -35,6 +35,7 @@ class MainActivity : FragmentActivity() {
                         factory = GymViewModelFactory(
                             app.repository,
                             app.localFoodRepository,
+                            app.localExerciseRepository,
                             app.offRepository,
                             app.aiManager,
                             app.modelDownloadManager,

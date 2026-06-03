@@ -16,6 +16,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import android.content.Intent
+import androidx.activity.compose.BackHandler
+import android.app.Activity
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import coil.compose.AsyncImage
@@ -49,6 +52,24 @@ fun MainScreenContent(
     var drawerOpen by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf(MainOverlay.None) }
     val context = LocalContext.current
+    var lastBackPress by remember { mutableLongStateOf(0L) }
+
+    BackHandler {
+        when {
+            overlay != MainOverlay.None -> overlay = MainOverlay.None
+            drawerOpen -> drawerOpen = false
+            selectedTab != 0 -> selectedTab = 0
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackPress < 2000L) {
+                    (context as? Activity)?.finish()
+                } else {
+                    lastBackPress = now
+                    Toast.makeText(context, "Tap again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(

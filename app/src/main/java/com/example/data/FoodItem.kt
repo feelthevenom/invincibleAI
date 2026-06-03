@@ -49,4 +49,32 @@ object FoodNutritionCalculator {
         fiberPer100g = entity.fiberPer100g,
         isCustom = true
     )
+
+    /** Derive per-100g values from a logged meal entry so weight edits can recalculate macros. */
+    fun per100FromMealEntry(entry: MealEntry): FoodItem? {
+        if (entry.weightGrams <= 0) return null
+        val factor = 100f / entry.weightGrams
+        return FoodItem(
+            name = entry.foodName,
+            caloriesPer100g = (entry.calories * factor).roundToInt(),
+            proteinPer100g = entry.protein * factor,
+            carbsPer100g = entry.carbs * factor,
+            fatPer100g = entry.fat * factor,
+            fiberPer100g = entry.fiber * factor
+        )
+    }
+
+    fun recalculateEntryForWeight(entry: MealEntry, weightGrams: Int): MealEntry? {
+        if (weightGrams <= 0) return null
+        val per100 = per100FromMealEntry(entry) ?: return null
+        val nutrition = nutritionForWeight(per100, weightGrams)
+        return entry.copy(
+            weightGrams = weightGrams,
+            calories = nutrition.calories,
+            protein = nutrition.protein,
+            carbs = nutrition.carbs,
+            fat = nutrition.fat,
+            fiber = nutrition.fiber
+        )
+    }
 }

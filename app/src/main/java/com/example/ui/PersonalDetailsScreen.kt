@@ -1,5 +1,8 @@
 package com.example.ui
 
+import android.os.Build
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,15 +23,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import android.os.Build
-import android.app.ActivityManager
-import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.GymViewModel
+import com.example.data.AiProviderConfig
 import com.example.data.CuisineTypes
+import com.example.data.OfflineModelConfig
 import com.example.data.FitnessCalculator
 import com.example.data.ProfileValidation
 import com.example.data.UserProfile
@@ -299,12 +301,26 @@ fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     val profile by viewModel.userProfile.collectAsState()
     val aiSettings by viewModel.aiSettingsState.collectAsState()
-    
-    var showApiKeyInput by remember { mutableStateOf(false) }
-    var apiKeyInput by remember { mutableStateOf("") }
-    var isApiKeyVisible by remember { mutableStateOf(false) }
+    val modelsRevision by viewModel.modelsRevision.collectAsState()
+    val secretsRevision by viewModel.secretsRevision.collectAsState()
 
-    val isCompatible = remember { viewModel.modelDownloadManager.isSystemCompatible() }
+    var showGeminiKeyInput by remember { mutableStateOf(false) }
+    var geminiKeyInput by remember { mutableStateOf("") }
+    var isGeminiKeyVisible by remember { mutableStateOf(false) }
+    var showGroqKeyInput by remember { mutableStateOf(false) }
+    var groqKeyInput by remember { mutableStateOf("") }
+    var isGroqKeyVisible by remember { mutableStateOf(false) }
+
+    val installedModels = remember(modelsRevision) { viewModel.modelDownloadManager.listInstalledModels() }
+    val geminiKey = remember(secretsRevision) { viewModel.getGeminiApiKey() }
+    val groqKey = remember(secretsRevision) { viewModel.getGroqApiKey() }
+
+    val aiStatus = viewModel.aiStatus()
+    val ramGb = remember { viewModel.modelDownloadManager.getTotalRamGb() }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importAnyModel(uri)
+    }
 
     val authenticate = { onSuccess: () -> Unit ->
         val executor = ContextCompat.getMainExecutor(context)
@@ -350,118 +366,217 @@ fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                Text("AI MODE SELECTION", style = Typography.labelMedium, color = Primary)
-                Spacer(Modifier.height(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AiModeRow("Online (Gemini)", "online", profile.aiMode, viewModel::updateAiMode)
-                    AiModeRow("Offline (Gemma-4 E2B-it)", "offline_2b", profile.aiMode, viewModel::updateAiMode, enabled = viewModel.modelDownloadManager.isModelDownloaded("offline_2b"))
-                    AiModeRow("Offline (Gemma-4 E4B-it)", "offline_4b", profile.aiMode, viewModel::updateAiMode, enabled = viewModel.modelDownloadManager.isModelDownloaded("offline_4b"))
-                    AiModeRow("None", "none", profile.aiMode, viewModel::updateAiMode)
-                }
-            }
-
-            item {
-                Text("GEMINI API CONFIGURATION", style = Typography.labelMedium, color = Primary)
-                Spacer(Modifier.height(8.dp))
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (aiStatus.isReady) Secondary.copy(0.12f) else Error.copy(0.08f)
+                    ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        val currentKey = viewModel.getGeminiApiKey()
-                        val hasKey = !currentKey.isNullOrBlank()
-
-                        if (showApiKeyInput) {
-                            OutlinedTextField(
-                                value = apiKeyInput,
-                                onValueChange = { apiKeyInput = it },
-                                label = { Text("Gemini API Key") },
-                                modifier = Modifier.fillMaxWidth(),
-                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { 
-                                        viewModel.setGeminiApiKey(apiKeyInput)
-                                        showApiKeyInput = false 
-                                        apiKeyInput = ""
-                                    }) {
-                                        Icon(Icons.Default.Save, null, tint = Primary)
-                                    }
-                                }
-                            )
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (hasKey) {
-                                    Text(if (isApiKeyVisible) currentKey!! else "••••••••••••", color = OnSurface, modifier = Modifier.weight(1f))
-                                } else {
-                                    Text("No API Key Set", color = OnSurfaceVariant, modifier = Modifier.weight(1f))
-                                }
-                                
-                                Row {
-                                    if (hasKey) {
-                                        IconButton(onClick = { 
-                                            authenticate { isApiKeyVisible = !isApiKeyVisible }
-                                        }) {
-                                            Icon(if (isApiKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, tint = Primary)
-                                        }
-                                        IconButton(onClick = { 
-                                            authenticate { 
-                                                apiKeyInput = viewModel.getGeminiApiKey() ?: ""
-                                                showApiKeyInput = true 
-                                            }
-                                        }) {
-                                            Icon(Icons.Default.Edit, null, tint = Primary)
-                                        }
-                                        IconButton(onClick = { 
-                                            authenticate { viewModel.clearGeminiApiKey() }
-                                        }) {
-                                            Icon(Icons.Default.Delete, null, tint = Error)
-                                        }
-                                    } else {
-                                        Button(onClick = { showApiKeyInput = true }) {
-                                            Text("Add Key")
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("AI STATUS", style = Typography.labelMedium, color = Primary)
+                        Text(aiStatus.label, style = Typography.titleMedium, color = if (aiStatus.isReady) Secondary else Error)
+                        Text(aiStatus.detail, style = Typography.bodySmall, color = OnSurfaceVariant)
+                        Text("Device RAM: ${String.format("%.1f", ramGb)} GB", style = Typography.bodySmall, color = OnSurfaceVariant)
                     }
                 }
             }
 
             item {
-                Text("OFFLINE MODELS", style = Typography.labelMedium, color = Primary)
-                if (!isCompatible) {
+                Text("AI PROVIDER", style = Typography.labelMedium, color = Primary)
+                Spacer(Modifier.height(8.dp))
+                val providerLabels = AiProviderConfig.PROVIDERS.map { AiProviderConfig.displayNameFor(it) }
+                val providerIndex = AiProviderConfig.PROVIDERS.indexOf(profile.aiProvider).coerceAtLeast(0)
+                WheelPickerField(
+                    label = "Choose provider",
+                    items = providerLabels,
+                    selectedIndex = providerIndex,
+                    onConfirm = { idx -> viewModel.updateAiProvider(AiProviderConfig.PROVIDERS[idx]) }
+                )
+            }
+
+            if (profile.aiProvider == "gemini" || profile.aiProvider == "groq") {
+                item {
+                    Text("MODEL", style = Typography.labelMedium, color = Primary)
+                    Spacer(Modifier.height(8.dp))
+                    val models = AiProviderConfig.modelsFor(profile.aiProvider)
+                    val modelIndex = models.indexOfFirst { it.id == profile.aiModelId }.coerceAtLeast(0)
+                    val selectedModel = models.getOrNull(modelIndex)
+                    WheelPickerField(
+                        label = "${AiProviderConfig.displayNameFor(profile.aiProvider)} model",
+                        items = models.map { AiProviderConfig.modelWheelLabel(profile.aiProvider, it) },
+                        selectedIndex = modelIndex,
+                        onConfirm = { idx -> viewModel.updateAiModel(models[idx].id) }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    selectedModel?.let { model ->
+                        if (!model.supportsVision) {
+                            Text(
+                                "Image analysis not available — ${model.displayName} is text-only. Use Gemini or Offline for food photos.",
+                                style = Typography.bodySmall,
+                                color = Error
+                            )
+                        } else {
+                            Text(
+                                "Supports text autofill and food photo analysis.",
+                                style = Typography.bodySmall,
+                                color = Secondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (profile.aiProvider == "offline") {
+                item {
+                    Text("OFFLINE MODEL", style = Typography.labelMedium, color = Primary)
+                    Spacer(Modifier.height(8.dp))
+                    if (installedModels.isEmpty()) {
+                        Text(
+                            "No on-device model installed. Download or import a model below.",
+                            style = Typography.bodySmall,
+                            color = OnSurfaceVariant
+                        )
+                    } else {
+                        val offlineIds = installedModels.map { it.id }
+                        val offlineIndex = offlineIds.indexOf(profile.offlineModelId).coerceAtLeast(0)
+                        val selected = installedModels.getOrNull(offlineIndex)
+                        WheelPickerField(
+                            label = "On-device model",
+                            items = installedModels.map { model ->
+                                val sizeLabel = if (model.isBuiltIn) {
+                                    if (model.id == "offline_2b") "~2.4 GB" else "~3.4 GB"
+                                } else "Imported"
+                                "${model.displayName} ($sizeLabel)"
+                            },
+                            selectedIndex = offlineIndex,
+                            onConfirm = { idx -> viewModel.updateOfflineModelId(offlineIds[idx]) }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        selected?.let {
+                            Text(
+                                "Ready for text autofill and food photo analysis on-device.",
+                                style = Typography.bodySmall,
+                                color = Secondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (profile.aiProvider == "gemini") {
+                item {
+                    Text("GEMINI API KEY", style = Typography.labelMedium, color = Primary)
+                    Spacer(Modifier.height(8.dp))
+                    ApiKeyCard(
+                        label = "Gemini API Key",
+                        currentKey = geminiKey,
+                        showInput = showGeminiKeyInput,
+                        keyInput = geminiKeyInput,
+                        isKeyVisible = isGeminiKeyVisible,
+                        onKeyInputChange = { geminiKeyInput = it },
+                        onShowInput = { showGeminiKeyInput = true },
+                        onSave = {
+                            viewModel.setGeminiApiKey(geminiKeyInput)
+                            showGeminiKeyInput = false
+                            geminiKeyInput = ""
+                        },
+                        onToggleVisibility = { isGeminiKeyVisible = !isGeminiKeyVisible },
+                        onEdit = {
+                            geminiKeyInput = viewModel.getGeminiApiKey() ?: ""
+                            showGeminiKeyInput = true
+                        },
+                        onClear = { viewModel.clearGeminiApiKey() },
+                        authenticate = authenticate
+                    )
+                }
+            }
+
+            if (profile.aiProvider == "groq") {
+                item {
+                    Text("GROQ API KEY", style = Typography.labelMedium, color = Primary)
                     Spacer(Modifier.height(4.dp))
-                    Text("System is not compatible with high-end Gemma models.", color = Error, style = Typography.bodySmall)
+                    Text(
+                        "Free tier at console.groq.com — used only for text autofill (no vision).",
+                        style = Typography.bodySmall,
+                        color = OnSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ApiKeyCard(
+                        label = "Groq API Key",
+                        currentKey = groqKey,
+                        showInput = showGroqKeyInput,
+                        keyInput = groqKeyInput,
+                        isKeyVisible = isGroqKeyVisible,
+                        onKeyInputChange = { groqKeyInput = it },
+                        onShowInput = { showGroqKeyInput = true },
+                        onSave = {
+                            viewModel.setGroqApiKey(groqKeyInput)
+                            showGroqKeyInput = false
+                            groqKeyInput = ""
+                        },
+                        onToggleVisibility = { isGroqKeyVisible = !isGroqKeyVisible },
+                        onEdit = {
+                            groqKeyInput = viewModel.getGroqApiKey() ?: ""
+                            showGroqKeyInput = true
+                        },
+                        onClear = { viewModel.clearGroqApiKey() },
+                        authenticate = authenticate
+                    )
+                }
+            }
+
+            item {
+                Text("OFFLINE MODELS", style = Typography.labelMedium, color = Primary)
+                aiSettings.error?.let { err ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(err, color = Error, style = Typography.bodySmall)
                 }
                 Spacer(Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ModelCard(
-                        "Gemma-4 E2B-it",
-                        "offline_2b",
-                        viewModel.modelDownloadManager.isModelDownloaded("offline_2b"),
-                        aiSettings.isDownloading2B,
-                        aiSettings.progress2B,
-                        isCompatible,
-                        onDownload = { viewModel.startModelDownload("offline_2b") },
-                        onCancel = { viewModel.cancelModelDownload("offline_2b") },
-                        onDelete = { viewModel.deleteModel("offline_2b") }
-                    )
-                    ModelCard(
-                        "Gemma-4 E4B-it",
-                        "offline_4b",
-                        viewModel.modelDownloadManager.isModelDownloaded("offline_4b"),
-                        aiSettings.isDownloading4B,
-                        aiSettings.progress4B,
-                        isCompatible,
-                        onDownload = { viewModel.startModelDownload("offline_4b") },
-                        onCancel = { viewModel.cancelModelDownload("offline_4b") },
-                        onDelete = { viewModel.deleteModel("offline_4b") }
-                    )
+                    val downloadState = remember(modelsRevision) {
+                        mapOf(
+                            "offline_2b" to viewModel.modelDownloadManager.isModelDownloaded("offline_2b"),
+                            "offline_4b" to viewModel.modelDownloadManager.isModelDownloaded("offline_4b")
+                        )
+                    }
+                    listOf("offline_2b", "offline_4b").forEach { modelId ->
+                        val isDownloaded = downloadState[modelId] == true
+                        val isCompatible = viewModel.modelDownloadManager.isSystemCompatible(modelId)
+                        val isDownloading = if (modelId == "offline_2b") aiSettings.isDownloading2B else aiSettings.isDownloading4B
+                        val progress = if (modelId == "offline_2b") aiSettings.progress2B else aiSettings.progress4B
+
+                        ModelCard(
+                            title = if (modelId == "offline_2b") "Gemma 4 E2B-it (~2.4 GB)" else "Gemma 4 E4B-it (~3.4 GB)",
+                            isDownloaded = isDownloaded,
+                            isDownloading = isDownloading,
+                            progress = progress,
+                            isCompatible = isCompatible,
+                            isSelected = profile.offlineModelId == modelId,
+                            onSelect = { if (isDownloaded) viewModel.updateOfflineModelId(modelId) },
+                            onDownload = { viewModel.startModelDownload(modelId) },
+                            onCancel = { viewModel.cancelModelDownload(modelId) },
+                            onDelete = { viewModel.deleteModel(modelId) }
+                        )
+                    }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Import Model", style = Typography.bodyLarge, color = Primary)
+                            Text(
+                                "Import a .litertlm model file if you already have one on this device. Imported models appear in the on-device model list.",
+                                style = Typography.bodySmall,
+                                color = OnSurfaceVariant
+                            )
+                            Button(
+                                onClick = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Choose .litertlm file")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -469,48 +584,108 @@ fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-fun AiModeRow(label: String, mode: String, currentMode: String, onSelect: (String) -> Unit, enabled: Boolean = true) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (currentMode == mode) Primary.copy(0.1f) else SurfaceContainerHighest.copy(0.1f),
-                RoundedCornerShape(8.dp)
-            )
-            .border(
-                1.dp,
-                if (currentMode == mode) Primary else OutlineVariant.copy(0.2f),
-                RoundedCornerShape(8.dp)
-            )
-            .clickable(enabled = enabled) { onSelect(mode) }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = if (enabled) OnSurface else OnSurface.copy(0.4f))
-        RadioButton(selected = currentMode == mode, onClick = { if (enabled) onSelect(mode) }, enabled = enabled)
-    }
-}
-
-@Composable
-fun ModelCard(
-    title: String,
-    mode: String,
-    isDownloaded: Boolean,
-    isDownloading: Boolean,
-    progress: Float,
-    isCompatible: Boolean,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onDelete: () -> Unit
+private fun ApiKeyCard(
+    label: String,
+    currentKey: String?,
+    showInput: Boolean,
+    keyInput: String,
+    isKeyVisible: Boolean,
+    onKeyInputChange: (String) -> Unit,
+    onShowInput: () -> Unit,
+    onSave: () -> Unit,
+    onToggleVisibility: () -> Unit,
+    onEdit: () -> Unit,
+    onClear: () -> Unit,
+    authenticate: (() -> Unit) -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
+            val hasKey = !currentKey.isNullOrBlank()
+            if (showInput) {
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = onKeyInputChange,
+                    label = { Text(label) },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = onSave) {
+                            Icon(Icons.Default.Save, null, tint = Primary)
+                        }
+                    }
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasKey) {
+                        Text(
+                            if (isKeyVisible) currentKey!! else "••••••••••••",
+                            color = OnSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Text("No API Key Set", color = OnSurfaceVariant, modifier = Modifier.weight(1f))
+                    }
+                    Row {
+                        if (hasKey) {
+                            IconButton(onClick = { authenticate(onToggleVisibility) }) {
+                                Icon(
+                                    if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    null,
+                                    tint = Primary
+                                )
+                            }
+                            IconButton(onClick = { authenticate(onEdit) }) {
+                                Icon(Icons.Default.Edit, null, tint = Primary)
+                            }
+                            IconButton(onClick = { authenticate(onClear) }) {
+                                Icon(Icons.Default.Delete, null, tint = Error)
+                            }
+                        } else {
+                            Button(onClick = onShowInput) { Text("Add Key") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModelCard(
+    title: String,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    progress: Float,
+    isCompatible: Boolean,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = isDownloaded) { onSelect() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Primary.copy(0.1f) else SurfaceContainerHighest.copy(0.3f)
+        ),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Primary) else null,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = Typography.bodyLarge, color = OnSurface)
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = Typography.bodyLarge, color = if (isSelected) Primary else OnSurface)
+                    if (isSelected) Text("Currently Active", style = Typography.labelSmall, color = Primary)
+                }
                 if (isDownloaded) {
                     IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Error) }
                 } else if (isDownloading) {
@@ -522,7 +697,7 @@ fun ModelCard(
             if (isDownloading) {
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
-                    progress = progress,
+                    progress = { progress },
                     modifier = Modifier.fillMaxWidth(),
                     color = Primary,
                     trackColor = SurfaceContainerHighest
@@ -530,7 +705,11 @@ fun ModelCard(
                 Text("${(progress * 100).toInt()}%", style = Typography.labelSmall, modifier = Modifier.align(Alignment.End))
             } else {
                 Text(
-                    if (isDownloaded) "Downloaded & Ready" else if (isCompatible) "Available for download" else "Not supported",
+                    when {
+                        isDownloaded -> "Downloaded & ready for on-device AI"
+                        isCompatible -> "Tap download to install"
+                        else -> "Needs more RAM for this model"
+                    },
                     style = Typography.bodySmall,
                     color = if (isDownloaded) Secondary else OnSurfaceVariant
                 )
