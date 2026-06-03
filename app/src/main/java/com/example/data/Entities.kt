@@ -26,8 +26,9 @@ data class UserProfile(
     val calorieAdjustmentWeekly: Int = 0,
     val cuisinePreferences: String = "",
     val onboardingComplete: Boolean = false,
-    val aiMode: String = "online", // "online", "offline_2b", "offline_4b", "none"
-    val offlineModelDownloaded: Boolean = false
+    val aiProvider: String = "gemini",       // "gemini", "groq", "offline"
+    val aiModelId: String = "gemini-2.0-flash",
+    val offlineModelId: String = "offline_2b"   // which offline model to use when provider=offline
 )
 
 @Entity(tableName = "progress_photos")
@@ -54,11 +55,24 @@ data class CustomFoodItem(
 data class ExerciseSet(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val exerciseName: String,
+    val exerciseType: String = "",
+    val workoutDayLabel: String = "",
     val setNumber: Int,
     val weight: Float,
     val reps: Int,
     val isCompleted: Boolean = false,
     val timestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "custom_exercises")
+data class CustomExercise(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val exerciseType: String,
+    val defaultSets: Int = 3,
+    val defaultReps: Int = 10,
+    val defaultWeight: Float = 0f,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "meals")

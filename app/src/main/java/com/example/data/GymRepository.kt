@@ -7,6 +7,7 @@ class GymRepository(private val gymDao: GymDao) {
     val allSets: Flow<List<ExerciseSet>> = gymDao.getAllSets()
     val allMeals: Flow<List<MealEntry>> = gymDao.getAllMeals()
     val customFoods: Flow<List<CustomFoodItem>> = gymDao.getAllCustomFoods()
+    val customExercises: Flow<List<CustomExercise>> = gymDao.getAllCustomExercises()
 
     suspend fun saveProfile(profile: UserProfile) {
         gymDao.insertOrUpdateProfile(profile)
@@ -38,5 +39,20 @@ class GymRepository(private val gymDao: GymDao) {
 
     suspend fun deleteCustomFood(food: CustomFoodItem) {
         gymDao.deleteCustomFood(food)
+    }
+
+    suspend fun deleteSet(set: ExerciseSet) {
+        gymDao.deleteSet(set)
+    }
+
+    suspend fun deleteExerciseForDay(name: String, dayLabel: String, dayStart: Long, dayEnd: Long) {
+        gymDao.deleteExerciseForDay(name, dayLabel, dayStart, dayEnd)
+    }
+
+    suspend fun addCustomExercise(exercise: CustomExercise): Long =
+        gymDao.insertCustomExercise(exercise)
+
+    suspend fun deleteCustomExercise(exercise: CustomExercise) {
+        gymDao.deleteCustomExercise(exercise)
     }
 }

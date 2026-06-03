@@ -90,7 +90,7 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.logging.interceptor)
   implementation(libs.generativeai)
-  implementation(libs.mediapipe.tasks.genai)
+  implementation(libs.litertlm.android)
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.security.crypto)
   // implementation(libs.firebase.ai)

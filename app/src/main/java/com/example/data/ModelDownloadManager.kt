@@ -1,103 +1,348 @@
 package com.example.data
 
-import android.app.DownloadManager
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import kotlinx.coroutines.delay
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
-class ModelDownloadManager(private val context: Context) {
+/**
+ * Downloads Gemma 4 .litertlm files the same way as Google AI Edge Gallery:
+ * - Pinned commit SHA in the resolve URL
+ * - ?download=true query param
+ * - HttpURLConnection with Range resume for partial files
+ * - Optional Bearer token (public litert-community models work without it)
+ */
+class ModelDownloadManager(
+    context: Context,
+    private val secureStorageManager: SecureStorageManager
+) {
+    private val appContext = context.applicationContext
 
-    private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    private val modelsDir: File
+        get() {
+            val dir = File(appContext.filesDir, "models")
+            if (!dir.exists()) dir.mkdirs()
+            return dir
+        }
 
-    private val modelUrls = mapOf(
-        "offline_2b" to "https://example.com/models/gemma-4-e2b-it.bin",
-        "offline_4b" to "https://example.com/models/gemma-4-e4b-it.bin"
+    fun getTotalRamGb(): Double {
+        val actManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memInfo = android.app.ActivityManager.MemoryInfo()
+        actManager.getMemoryInfo(memInfo)
+        return memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
+    }
+
+    fun isSystemCompatible(modelType: String): Boolean {
+        val spec = OfflineModelConfig.specFor(modelType) ?: return false
+        return getTotalRamGb() >= spec.minRamGb && Build.VERSION.SDK_INT >= 24
+    }
+
+    fun modelFile(modelType: String): File? = resolveModelFile(modelType)
+
+    fun resolveModelFile(modelId: String): File? {
+        OfflineModelConfig.specFor(modelId)?.let { spec ->
+            val file = File(modelsDir, spec.fileName)
+            return file.takeIf { it.exists() }
+        }
+        if (modelId.startsWith("imported:")) {
+            val file = File(modelsDir, modelId.removePrefix("imported:"))
+            return file.takeIf { it.exists() && OfflineModelConfig.isValidImportedFile(it.length()) }
+        }
+        return null
+    }
+
+    data class InstalledOfflineModel(
+        val id: String,
+        val displayName: String,
+        val fileName: String,
+        val isBuiltIn: Boolean,
+        val minRamGb: Double
     )
 
-    fun isSystemCompatible(): Boolean {
-        // Snapdragon 8 Gen 3 identification
-        // Note: In a real app, checking Build.HARDWARE or parsing /proc/cpuinfo is common.
-        // We'll simulate a check for high-end devices.
-        val soc = Build.HARDWARE.lowercase()
-        val proc = Build.BOARD.lowercase()
-        return (soc.contains("qcom") || soc.contains("snapdragon") || proc.contains("pineapple")) && 
-               Runtime.getRuntime().availableProcessors() >= 8
+    fun listInstalledModels(): List<InstalledOfflineModel> {
+        val knownNames = OfflineModelConfig.ALL.map { it.fileName }.toSet()
+        val builtIn = OfflineModelConfig.ALL.mapNotNull { spec ->
+            if (!isModelDownloaded(spec.id)) return@mapNotNull null
+            InstalledOfflineModel(
+                id = spec.id,
+                displayName = spec.displayName,
+                fileName = spec.fileName,
+                isBuiltIn = true,
+                minRamGb = spec.minRamGb
+            )
+        }
+        val imported = modelsDir.listFiles()
+            ?.filter { file ->
+                file.isFile &&
+                    file.name.endsWith(".litertlm", ignoreCase = true) &&
+                    file.name !in knownNames &&
+                    OfflineModelConfig.isValidImportedFile(file.length())
+            }
+            ?.map { file ->
+                InstalledOfflineModel(
+                    id = OfflineModelConfig.importedId(file.name),
+                    displayName = file.name.removeSuffix(".litertlm").removeSuffix(".LITERTLM"),
+                    fileName = file.name,
+                    isBuiltIn = false,
+                    minRamGb = 4.0
+                )
+            }
+            .orEmpty()
+        return builtIn + imported
     }
+
+    fun isModelInstalled(modelId: String): Boolean =
+        listInstalledModels().any { it.id == modelId }
 
     fun isModelDownloaded(modelType: String): Boolean {
-        val fileName = if (modelType == "offline_4b") "gemma-4b.bin" else "gemma-2b.bin"
-        val modelFile = File(context.filesDir, "models/$fileName")
-        return modelFile.exists() && modelFile.length() > 1024 * 1024 // At least 1MB
+        val spec = OfflineModelConfig.specFor(modelType) ?: return false
+        val file = File(modelsDir, spec.fileName)
+        return file.exists() && OfflineModelConfig.isValidModelFile(spec, file.length())
     }
 
-    fun downloadModel(modelType: String): Long {
-        val fileName = if (modelType == "offline_4b") "gemma-4b.bin" else "gemma-2b.bin"
-        val url = modelUrls[modelType] ?: throw IllegalArgumentException("Unknown model URL")
+    fun downloadModel(modelType: String): Flow<DownloadStatus> = callbackFlow {
+        val spec = OfflineModelConfig.specFor(modelType)
+        if (spec == null) {
+            trySend(DownloadStatus.Error("Unknown model type"))
+            close()
+            return@callbackFlow
+        }
 
-        val modelsDir = File(context.filesDir, "models")
-        if (!modelsDir.exists()) modelsDir.mkdirs()
+        if (!isSystemCompatible(modelType)) {
+            trySend(
+                DownloadStatus.Error(
+                    "Device needs at least ${spec.minRamGb} GB RAM for ${spec.displayName}. " +
+                        "Your device: ${String.format("%.1f", getTotalRamGb())} GB."
+                )
+            )
+            close()
+            return@callbackFlow
+        }
 
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("Downloading $modelType")
-            .setDescription("Gemma AI model")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
-            .setAllowedOverMetered(false)
+        val dest = File(modelsDir, spec.fileName)
+        val temp = File(modelsDir, "${spec.fileName}.download")
+        val url = OfflineModelConfig.downloadUrl(spec)
+        val token = secureStorageManager.getHuggingFaceToken()?.trim().orEmpty()
 
-        return downloadManager.enqueue(request)
-    }
+        var cancelled = false
+        invokeOnClose { cancelled = true }
 
-    fun deleteModel(modelType: String) {
-        val fileName = if (modelType == "offline_4b") "gemma-4b.bin" else "gemma-2b.bin"
-        val file = File(context.filesDir, "models/$fileName")
-        if (file.exists()) file.delete()
-    }
+        trySend(DownloadStatus.Downloading(if (temp.exists()) estimateProgress(temp.length(), spec) else 0f))
 
-    fun getDownloadProgress(downloadId: Long): Flow<DownloadStatus> = flow {
-        var isDownloading = true
-        while (isDownloading) {
-            val query = DownloadManager.Query().setFilterById(downloadId)
-            val cursor: Cursor = downloadManager.query(query)
-            if (cursor.moveToFirst()) {
-                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                val bytesDownloaded = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                val bytesTotal = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    isDownloading = false
-                    // Here we should move the file to internal storage, but for this demo 
-                    // we'll assume the status check handles the logic.
-                    emit(DownloadStatus.Success)
-                } else if (status == DownloadManager.STATUS_FAILED) {
-                    isDownloading = false
-                    emit(DownloadStatus.Error("Download failed"))
-                } else {
-                    val progress = if (bytesTotal > 0) (bytesDownloaded.toFloat() / bytesTotal) else 0f
-                    emit(DownloadStatus.Downloading(progress))
-                }
-            } else {
-                isDownloading = false
-                emit(DownloadStatus.Error("Download not found"))
+        try {
+            withContext(Dispatchers.IO) {
+                downloadWithResume(
+                    url = url,
+                    temp = temp,
+                    dest = dest,
+                    spec = spec,
+                    token = token.takeIf { it.isNotBlank() },
+                    isCancelled = { cancelled || !isActive },
+                    onProgress = { progress ->
+                        trySend(DownloadStatus.Downloading(progress))
+                    }
+                )
             }
-            cursor.close()
-            if (isDownloading) delay(500)
+            trySend(DownloadStatus.Success)
+        } catch (e: Exception) {
+            Log.e(TAG, "Model download failed: $url", e)
+            trySend(DownloadStatus.Error(e.message ?: "Download failed"))
+        }
+        close()
+    }
+
+    private fun downloadWithResume(
+        url: String,
+        temp: File,
+        dest: File,
+        spec: OfflineModelConfig.ModelSpec,
+        token: String?,
+        isCancelled: () -> Boolean,
+        onProgress: (Float) -> Unit
+    ) {
+        var partialSize = if (temp.exists()) temp.length() else 0L
+        if (partialSize > 0 && partialSize >= spec.expectedSizeBytes) {
+            temp.delete()
+            partialSize = 0L
+        }
+
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 30_000
+            readTimeout = 300_000
+            setRequestProperty("User-Agent", "GymAI/1.0 (Android; LiteRT-LM)")
+            if (partialSize > 0) {
+                setRequestProperty("Range", "bytes=$partialSize-")
+                setRequestProperty("Accept-Encoding", "identity")
+            }
+            token?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+
+        try {
+            connection.connect()
+            val code = connection.responseCode
+            when (code) {
+                HttpURLConnection.HTTP_OK -> {
+                    if (partialSize > 0) temp.delete()
+                    partialSize = 0L
+                }
+                HttpURLConnection.HTTP_PARTIAL -> { /* resume OK */ }
+                else -> throw IllegalStateException(
+                    when (code) {
+                        401, 403 -> "Download blocked (HTTP $code). Try Import, or add optional HF token in Settings."
+                        404 -> "Model not found. URL: $url"
+                        else -> "Download failed (HTTP $code)"
+                    }
+                )
+            }
+
+            val totalHeader = connection.getHeaderField("Content-Length")?.toLongOrNull()
+            val totalBytes = when {
+                totalHeader != null && totalHeader > 0 -> partialSize + totalHeader
+                else -> spec.expectedSizeBytes
+            }
+
+            connection.inputStream.use { input ->
+                FileOutputStream(temp, partialSize > 0).use { output ->
+                    val buffer = ByteArray(8192)
+                    var downloaded = partialSize
+                    var lastReport = 0L
+                    while (true) {
+                        if (isCancelled()) throw IllegalStateException("Download cancelled")
+                        val read = input.read(buffer)
+                        if (read == -1) break
+                        output.write(buffer, 0, read)
+                        downloaded += read
+                        val now = System.currentTimeMillis()
+                        if (now - lastReport > 200) {
+                            onProgress((downloaded.toFloat() / totalBytes).coerceIn(0f, 0.99f))
+                            lastReport = now
+                        }
+                    }
+                    output.flush()
+                }
+            }
+
+            if (!OfflineModelConfig.isValidModelFile(spec, temp.length())) {
+                temp.delete()
+                throw IllegalStateException(
+                    "Download incomplete (${temp.length()} bytes). Expected ~${spec.expectedSizeBytes / 1_000_000_000} GB."
+                )
+            }
+
+            if (dest.exists()) dest.delete()
+            if (!temp.renameTo(dest)) {
+                temp.copyTo(dest, overwrite = true)
+                temp.delete()
+            }
+            onProgress(1f)
+        } finally {
+            connection.disconnect()
         }
     }
 
-    fun cancelDownload(downloadId: Long) {
-        downloadManager.remove(downloadId)
+    private fun estimateProgress(currentBytes: Long, spec: OfflineModelConfig.ModelSpec): Float =
+        (currentBytes.toFloat() / spec.expectedSizeBytes).coerceIn(0f, 0.99f)
+
+    suspend fun importAnyModel(uri: Uri): DownloadStatus = withContext(Dispatchers.IO) {
+        try {
+            val rawName = appContext.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+            } ?: "imported-model.litertlm"
+
+            val fileName = when {
+                rawName.endsWith(".litertlm", ignoreCase = true) -> rawName
+                else -> "$rawName.litertlm"
+            }.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+
+            val dest = File(modelsDir, fileName)
+            val temp = File(modelsDir, "$fileName.import")
+
+            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(temp).use { output -> input.copyTo(output) }
+            } ?: return@withContext DownloadStatus.Error("Cannot read selected file")
+
+            if (!OfflineModelConfig.isValidImportedFile(temp.length())) {
+                temp.delete()
+                return@withContext DownloadStatus.Error(
+                    "Invalid model file (${temp.length() / 1_000_000} MB). Expected a .litertlm model."
+                )
+            }
+
+            if (dest.exists()) dest.delete()
+            if (!temp.renameTo(dest)) {
+                temp.copyTo(dest, overwrite = true)
+                temp.delete()
+            }
+            DownloadStatus.Success
+        } catch (e: Exception) {
+            DownloadStatus.Error(e.message ?: "Import failed")
+        }
+    }
+
+    suspend fun importModelFromUri(modelType: String, uri: Uri): DownloadStatus = withContext(Dispatchers.IO) {
+        val spec = OfflineModelConfig.specFor(modelType)
+            ?: return@withContext DownloadStatus.Error("Unknown model type")
+
+        val dest = File(modelsDir, spec.fileName)
+        val temp = File(modelsDir, "${spec.fileName}.import")
+
+        try {
+            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(temp).use { output -> input.copyTo(output) }
+            } ?: return@withContext DownloadStatus.Error("Cannot read selected file")
+
+            if (!OfflineModelConfig.isValidModelFile(spec, temp.length())) {
+                temp.delete()
+                return@withContext DownloadStatus.Error(
+                    "Invalid model file (${temp.length() / 1_000_000} MB). Expected ${spec.fileName} (~${spec.expectedSizeBytes / 1_000_000_000} GB)."
+                )
+            }
+
+            if (dest.exists()) dest.delete()
+            if (!temp.renameTo(dest)) {
+                temp.copyTo(dest, overwrite = true)
+                temp.delete()
+            }
+            DownloadStatus.Success
+        } catch (e: Exception) {
+            temp.delete()
+            DownloadStatus.Error(e.message ?: "Import failed")
+        }
+    }
+
+    fun deleteModel(modelType: String) {
+        OfflineModelConfig.specFor(modelType)?.let { spec ->
+            File(modelsDir, spec.fileName).delete()
+            File(modelsDir, "${spec.fileName}.download").delete()
+        }
+        if (modelType.startsWith("imported:")) {
+            resolveModelFile(modelType)?.delete()
+        }
+        File(modelsDir, "gemma-2b.bin").delete()
+        File(modelsDir, "gemma-4b.bin").delete()
+        File(modelsDir, "gemma-3n-E2B-it-int4.litertlm").delete()
+        File(modelsDir, "gemma-3n-E4B-it-int4.litertlm").delete()
+    }
+
+    companion object {
+        private const val TAG = "ModelDownload"
     }
 }
 
 sealed class DownloadStatus {
     data class Downloading(val progress: Float) : DownloadStatus()
-    object Success : DownloadStatus()
+    data object Success : DownloadStatus()
     data class Error(val message: String) : DownloadStatus()
 }
-

@@ -2,15 +2,20 @@ package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.launch
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
-import android.provider.MediaStore
 import androidx.compose.foundation.background
+import androidx.core.content.ContextCompat
+import com.example.data.BitmapLoader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,7 +51,7 @@ private sealed class MealSheetPage {
     data object Detail : MealSheetPage()
     data object FoodList : MealSheetPage()
     data class FoodWeight(val food: FoodItem) : MealSheetPage()
-    data object CustomFood : MealSheetPage()
+    data class CustomFood(val prefilledName: String = "") : MealSheetPage()
     data class PlateAnalysis(val bitmap: Bitmap) : MealSheetPage()
 }
 
@@ -55,6 +60,7 @@ fun MealDetailOverlay(
     mealType: String,
     budget: MealTypes.MealBudget,
     entries: List<MealEntry>,
+    logDayStart: Long,
     viewModel: GymViewModel,
     onDismiss: () -> Unit
 ) {
@@ -62,32 +68,139 @@ fun MealDetailOverlay(
     val customFoods by viewModel.customFoods.collectAsState()
     val searchState by viewModel.foodSearchState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isLoadingImage by remember { mutableStateOf(false) }
+    var imageLoadError by remember { mutableStateOf<String?>(null) }
+    var pendingImageAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    fun openPlateAnalysis(bitmap: Bitmap) {
+        scope.launch {
+            isLoadingImage = true
+            imageLoadError = null
+            try {
+                val safeBitmap = withContext(Dispatchers.Default) {
+                    BitmapLoader.ensureSoftwareBitmap(bitmap)
+                }
+                page = MealSheetPage.PlateAnalysis(safeBitmap)
+            } catch (e: Exception) {
+                imageLoadError = e.message ?: "Failed to prepare image for analysis"
+            } finally {
+                isLoadingImage = false
+            }
+        }
+    }
+
+    fun loadPlateAnalysisFromUri(uri: Uri) {
+        scope.launch {
+            isLoadingImage = true
+            imageLoadError = null
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    BitmapLoader.loadScaledFromUri(context, uri)
+                }
+                page = MealSheetPage.PlateAnalysis(bitmap)
+            } catch (e: Exception) {
+                imageLoadError = e.message ?: "Failed to load image. Try a smaller photo."
+            } finally {
+                isLoadingImage = false
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            pendingImageAction?.invoke()
+        } else {
+            imageLoadError = "Camera permission is required to take food photos."
+        }
+        pendingImageAction = null
+    }
+
+    val galleryPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            pendingImageAction?.invoke()
+        } else {
+            imageLoadError = "Photo access permission is required to pick images from your gallery."
+        }
+        pendingImageAction = null
+    }
+
+    fun requestCameraPermissionThen(action: () -> Unit) {
+        when {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED -> action()
+            else -> {
+                pendingImageAction = action
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+
+    fun requestGalleryPermissionThen(action: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            when {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) ==
+                    PackageManager.PERMISSION_GRANTED -> action()
+                else -> {
+                    pendingImageAction = action
+                    galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            action()
+        } else {
+            when {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                    PackageManager.PERMISSION_GRANTED -> action()
+                else -> {
+                    pendingImageAction = action
+                    galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                }
+            }
+        }
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) openPlateAnalysis(bitmap)
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) loadPlateAnalysisFromUri(uri)
+    }
     val consumedCal = entries.sumOf { it.calories }
     val consumedPro = entries.sumOf { it.protein }
     val consumedCarb = entries.sumOf { it.carbs }
     val consumedFat = entries.sumOf { it.fat }
     val consumedFib = entries.sumOf { it.fiber }
 
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        if (bitmap != null) page = MealSheetPage.PlateAnalysis(bitmap)
+    DisposableEffect(Unit) {
+        onDispose { viewModel.clearFoodSearch() }
     }
-    
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            val bitmap = if (Build.VERSION.SDK_INT < 28) {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-            } else {
-                val source = ImageDecoder.createSource(context.contentResolver, uri)
-                ImageDecoder.decodeBitmap(source)
+
+    BackHandler {
+        page = when (page) {
+            is MealSheetPage.FoodWeight, is MealSheetPage.CustomFood -> MealSheetPage.FoodList
+            is MealSheetPage.PlateAnalysis, MealSheetPage.FoodList -> MealSheetPage.Detail
+            else -> {
+                onDismiss()
+                return@BackHandler
             }
-            page = MealSheetPage.PlateAnalysis(bitmap)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.clearFoodSearch() }
+    if (imageLoadError != null) {
+        AlertDialog(
+            onDismissRequest = { imageLoadError = null },
+            title = { Text("Image Error") },
+            text = { Text(imageLoadError!!) },
+            confirmButton = {
+                TextButton(onClick = { imageLoadError = null }) { Text("OK") }
+            }
+        )
     }
 
     Dialog(
@@ -116,7 +229,7 @@ fun MealDetailOverlay(
                         onBack = {
                             page = when (page) {
                                 is MealSheetPage.FoodWeight -> MealSheetPage.FoodList
-                                MealSheetPage.CustomFood -> MealSheetPage.FoodList
+                                is MealSheetPage.CustomFood -> MealSheetPage.FoodList
                                 is MealSheetPage.PlateAnalysis -> MealSheetPage.Detail
                                 else -> MealSheetPage.Detail
                             }
@@ -145,20 +258,27 @@ fun MealDetailOverlay(
                                     viewModel.loadFoodSuggestions()
                                     page = MealSheetPage.FoodList
                                 },
-                                onCameraClick = { cameraLauncher.launch() },
-                                onGalleryClick = { galleryLauncher.launch("image/*") },
+                                onCameraClick = {
+                                    requestCameraPermissionThen { cameraLauncher.launch() }
+                                },
+                                onGalleryClick = {
+                                    requestGalleryPermissionThen { galleryLauncher.launch("image/*") }
+                                },
                                 viewModel = viewModel
                             )
                             MealSheetPage.FoodList -> FoodSearchPage(
                                 searchState = searchState,
                                 customFoods = customFoods,
                                 onQueryChange = viewModel::onFoodSearchQueryChanged,
-                                onCreateCustom = { page = MealSheetPage.CustomFood },
+                                onCreateCustom = {
+                                    page = MealSheetPage.CustomFood(searchState.query.trim())
+                                },
                                 onFoodSelected = { page = MealSheetPage.FoodWeight(it) },
                                 viewModel = viewModel
                             )
-                            MealSheetPage.CustomFood -> CustomFoodCreatePage(
+                            is MealSheetPage.CustomFood -> CustomFoodCreatePage(
                                 viewModel = viewModel,
+                                initialName = currentPage.prefilledName,
                                 onSave = { item: CustomFoodItem ->
                                     viewModel.addCustomFoodAndReturn(item) { food ->
                                         page = MealSheetPage.FoodWeight(food)
@@ -168,7 +288,7 @@ fun MealDetailOverlay(
                             is MealSheetPage.FoodWeight -> FoodWeightPage(
                                 food = currentPage.food,
                                 onAdd = { grams: Int ->
-                                    viewModel.addFoodToMeal(mealType, currentPage.food, grams)
+                                    viewModel.addFoodToMeal(mealType, currentPage.food, grams, logDayStart)
                                     page = MealSheetPage.Detail
                                 }
                             )
@@ -176,10 +296,25 @@ fun MealDetailOverlay(
                                 bitmap = currentPage.bitmap,
                                 viewModel = viewModel,
                                 mealType = mealType,
+                                logDayStart = logDayStart,
                                 onCompleted = { page = MealSheetPage.Detail },
                                 onCancel = { page = MealSheetPage.Detail }
                             )
                         }
+                    }
+                }
+            }
+            if (isLoadingImage) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Primary)
+                        Spacer(Modifier.height(12.dp))
+                        Text("Loading image…", color = OnSurface)
                     }
                 }
             }
@@ -211,7 +346,7 @@ private fun MealSheetTopBar(
             when (page) {
                 MealSheetPage.Detail -> mealType
                 MealSheetPage.FoodList -> "Add Item"
-                MealSheetPage.CustomFood -> "Custom Item"
+                is MealSheetPage.CustomFood -> "Custom Item"
                 is MealSheetPage.FoodWeight -> page.food.name
                 is MealSheetPage.PlateAnalysis -> "AI Analysis"
             },
@@ -280,9 +415,14 @@ private fun FoodSearchPage(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "custom_create") {
+                val query = searchState.query.trim()
                 FoodListItem(
                     name = "Create Custom Item",
-                    subtitle = "Add your own food with per 100g nutrition",
+                    subtitle = if (query.isNotBlank()) {
+                        "Add \"$query\" — name pre-filled, edit or use AI Autofill"
+                    } else {
+                        "Add your own food with per 100g nutrition"
+                    },
                     icon = Icons.Default.Create,
                     highlight = true,
                     onClick = onCreateCustom
@@ -388,8 +528,12 @@ private fun SectionHeader(text: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CustomFoodCreatePage(viewModel: GymViewModel, onSave: (CustomFoodItem) -> Unit) {
-    var name by remember { mutableStateOf("") }
+private fun CustomFoodCreatePage(
+    viewModel: GymViewModel,
+    initialName: String = "",
+    onSave: (CustomFoodItem) -> Unit
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
     var calories by remember { mutableStateOf("") }
     var protein by remember { mutableStateOf("") }
     var carbs by remember { mutableStateOf("") }
@@ -403,10 +547,10 @@ private fun CustomFoodCreatePage(viewModel: GymViewModel, onSave: (CustomFoodIte
     var showSuggestions by remember { mutableStateOf(false) }
 
     fun triggerAiAutofill() {
-        if (name.isBlank() || profile.aiMode == "none") return
+        if (name.isBlank() || !viewModel.isAiConfigured()) return
         isAiLoading = true
         scope.launch {
-            val suggestions = viewModel.aiManager.generateFoodSuggestions(name, profile.aiMode)
+            val suggestions = viewModel.generateFoodSuggestions(name)
             if (suggestions.isNotEmpty()) {
                 aiSuggestions = suggestions
                 showSuggestions = true
@@ -423,7 +567,7 @@ private fun CustomFoodCreatePage(viewModel: GymViewModel, onSave: (CustomFoodIte
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Enter nutrition per 100g", style = Typography.bodyMedium, color = OnSurfaceVariant)
-            if (profile.aiMode != "none") {
+            if (viewModel.isAiConfigured()) {
                 TextButton(onClick = { triggerAiAutofill() }, enabled = !isAiLoading && name.isNotBlank()) {
                     if (isAiLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Primary)
@@ -617,33 +761,51 @@ private fun MealDetailPage(
 
     if (showCameraOptions) {
         val profile by viewModel.userProfile.collectAsState()
-        if (profile.aiMode == "none") {
-            AlertDialog(
-                onDismissRequest = { showCameraOptions = false },
-                title = { Text("AI Not Integrated") },
-                text = { Text("Neither Online nor Offline AI is configured in Settings.") },
-                confirmButton = { TextButton(onClick = { showCameraOptions = false }) { Text("OK") } }
-            )
-        } else {
-            AlertDialog(
-                onDismissRequest = { showCameraOptions = false },
-                title = { Text("AI Vision") },
-                text = {
-                    Column {
-                        ListItem(
-                            headlineContent = { Text("Capture Image") },
-                            leadingContent = { Icon(Icons.Default.CameraAlt, null) },
-                            modifier = Modifier.clickable { onCameraClick(); showCameraOptions = false }
+        val aiReady = remember(profile) { viewModel.aiStatus().isReady }
+        val visionReady = remember(profile) { viewModel.supportsVision() }
+        when {
+            !aiReady -> {
+                AlertDialog(
+                    onDismissRequest = { showCameraOptions = false },
+                    title = { Text("AI Not Configured") },
+                    text = { Text("Add an API key or download an offline model in AI Settings.") },
+                    confirmButton = { TextButton(onClick = { showCameraOptions = false }) { Text("OK") } }
+                )
+            }
+            !visionReady -> {
+                AlertDialog(
+                    onDismissRequest = { showCameraOptions = false },
+                    title = { Text("Not Available") },
+                    text = {
+                        Text(
+                            "Food photo analysis is not available with ${com.example.data.AiProviderConfig.displayNameFor(profile.aiProvider)}. " +
+                                "Switch to Gemini or Offline in AI Settings."
                         )
-                        ListItem(
-                            headlineContent = { Text("Add from Gallery") },
-                            leadingContent = { Icon(Icons.Default.PhotoLibrary, null) },
-                            modifier = Modifier.clickable { onGalleryClick(); showCameraOptions = false }
-                        )
-                    }
-                },
-                confirmButton = {}
-            )
+                    },
+                    confirmButton = { TextButton(onClick = { showCameraOptions = false }) { Text("OK") } }
+                )
+            }
+            else -> {
+                AlertDialog(
+                    onDismissRequest = { showCameraOptions = false },
+                    title = { Text("AI Vision") },
+                    text = {
+                        Column {
+                            ListItem(
+                                headlineContent = { Text("Capture Image") },
+                                leadingContent = { Icon(Icons.Default.CameraAlt, null) },
+                                modifier = Modifier.clickable { onCameraClick(); showCameraOptions = false }
+                            )
+                            ListItem(
+                                headlineContent = { Text("Add from Gallery") },
+                                leadingContent = { Icon(Icons.Default.PhotoLibrary, null) },
+                                modifier = Modifier.clickable { onGalleryClick(); showCameraOptions = false }
+                            )
+                        }
+                    },
+                    confirmButton = {}
+                )
+            }
         }
     }
 
@@ -678,31 +840,47 @@ private fun MealDetailPage(
 
 @Composable
 private fun EditMealEntryDialog(entry: MealEntry, onDismiss: () -> Unit, onSave: (MealEntry) -> Unit) {
-    var kcal by remember { mutableStateOf(entry.calories.toString()) }
-    var pro by remember { mutableStateOf(entry.protein.toString()) }
-    var carb by remember { mutableStateOf(entry.carbs.toString()) }
-    var fat by remember { mutableStateOf(entry.fat.toString()) }
+    var weight by remember(entry.id) { mutableStateOf(entry.weightGrams.toString()) }
+    val weightInt = weight.toIntOrNull() ?: 0
+    val preview = remember(entry, weightInt) {
+        if (weightInt > 0) FoodNutritionCalculator.recalculateEntryForWeight(entry, weightInt) else null
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Macros: ${entry.foodName}") },
+        title = { Text("Edit Weight: ${entry.foodName}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = kcal, onValueChange = { kcal = it }, label = { Text("Calories") }, suffix = { Text("kcal") })
-                OutlinedTextField(value = pro, onValueChange = { pro = it }, label = { Text("Protein") }, suffix = { Text("g") })
-                OutlinedTextField(value = carb, onValueChange = { carb = it }, label = { Text("Carbs") }, suffix = { Text("g") })
-                OutlinedTextField(value = fat, onValueChange = { fat = it }, label = { Text("Fat") }, suffix = { Text("g") })
+                OutlinedTextField(
+                    value = weight,
+                    onValueChange = { v ->
+                        if (v.all { it.isDigit() } && v.length <= 5) weight = v
+                    },
+                    label = { Text("Weight") },
+                    suffix = { Text("g") },
+                    singleLine = true
+                )
+                if (preview != null) {
+                    Text(
+                        "Calculated for ${preview.weightGrams}g",
+                        style = Typography.labelMedium,
+                        color = Primary
+                    )
+                    Text(
+                        "${preview.calories} kcal · P${preview.protein}g · C${preview.carbs}g · F${preview.fat}g · Fiber ${preview.fiber}g",
+                        style = Typography.bodyMedium,
+                        color = OnSurfaceVariant
+                    )
+                } else if (weight.isNotEmpty() && weightInt <= 0) {
+                    Text("Enter a valid weight in grams", color = Error, style = Typography.bodySmall)
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onSave(entry.copy(
-                    calories = kcal.toIntOrNull() ?: entry.calories,
-                    protein = pro.toIntOrNull() ?: entry.protein,
-                    carbs = carb.toIntOrNull() ?: entry.carbs,
-                    fat = fat.toIntOrNull() ?: entry.fat
-                ))
-            }) { Text("Confirm") }
+            TextButton(
+                onClick = { preview?.let(onSave) },
+                enabled = preview != null
+            ) { Text("Confirm") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -715,15 +893,31 @@ private fun PlateAnalysisPage(
     bitmap: Bitmap,
     viewModel: GymViewModel,
     mealType: String,
+    logDayStart: Long,
     onCompleted: () -> Unit,
     onCancel: () -> Unit
 ) {
     var detectedItems by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
+    var analysisError by remember { mutableStateOf<String?>(null) }
     var isAnalyzing by remember { mutableStateOf(true) }
     val profile by viewModel.userProfile.collectAsState()
+    val aiStatus = remember(profile.aiProvider, profile.aiModelId, profile.offlineModelId) {
+        viewModel.aiStatus()
+    }
 
-    LaunchedEffect(bitmap) {
-        detectedItems = viewModel.aiManager.analyzeFoodImage(bitmap, profile.aiMode)
+    LaunchedEffect(bitmap, profile.aiProvider, profile.aiModelId, profile.offlineModelId) {
+        isAnalyzing = true
+        analysisError = null
+        when (val result = viewModel.analyzeFoodImage(bitmap)) {
+            is com.example.data.AiAnalysisResult.Success -> {
+                detectedItems = result.items
+                analysisError = null
+            }
+            is com.example.data.AiAnalysisResult.Error -> {
+                detectedItems = emptyList()
+                analysisError = result.message
+            }
+        }
         isAnalyzing = false
     }
 
@@ -732,7 +926,26 @@ private fun PlateAnalysisPage(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = Primary)
                 Spacer(Modifier.height(16.dp))
-                Text("AI is identifying food items...", color = OnSurfaceVariant)
+                Text(
+                    when (profile.aiProvider) {
+                        "offline" -> "Running on-device AI…"
+                        "groq" -> "Analyzing with Groq…"
+                        else -> "Analyzing with Gemini…"
+                    },
+                    color = OnSurfaceVariant
+                )
+            }
+        }
+    } else if (analysisError != null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                Text("Analysis failed", style = Typography.headlineSmall, color = Error)
+                Spacer(Modifier.height(8.dp))
+                Text(analysisError!!, color = OnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                Text("${aiStatus.label}: ${aiStatus.detail}", style = Typography.bodySmall, color = OnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = onCancel) { Text("Go Back") }
             }
         }
     } else if (detectedItems.isEmpty()) {
@@ -792,7 +1005,7 @@ private fun PlateAnalysisPage(
                 Button(
                     onClick = {
                         finalItems.forEach { (food, weight) ->
-                            viewModel.addFoodToMeal(mealType, food, weight.toIntOrNull() ?: 100)
+                            viewModel.addFoodToMeal(mealType, food, weight.toIntOrNull() ?: 100, logDayStart)
                         }
                         onCompleted()
                     },

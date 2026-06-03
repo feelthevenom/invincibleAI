@@ -144,8 +144,14 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         weeklyWarning = validation.message
         weeksToGoal = FitnessCalculator.weeksToReachGoal(cw, tw, if (validation.isValid) change else 0f)
         maintenanceCalories = FitnessCalculator.tdee(gender, cw, h, a, activityLevel)
-        calorieAdjustmentDaily = FitnessCalculator.calorieAdjustmentDaily(maintenanceCalories, cal)
+        calorieAdjustmentDaily = FitnessCalculator.calorieAdjustmentFromWeeklyChange(goal, change)
         calorieAdjustmentWeekly = calorieAdjustmentDaily * 7
+        dailyCalories = FitnessCalculator.dailyCaloriesFromWeeklyChange(maintenanceCalories, goal, change).toString()
+        val macros = FitnessCalculator.calculateMacros(cw, dailyCalories.toIntOrNull() ?: 0, goal)
+        protein = macros.protein.toString()
+        carbs = macros.carbs.toString()
+        fat = macros.fat.toString()
+        fiber = macros.fiber.toString()
     }
 
     LaunchedEffect(step, goal, currentWeightIndex, targetWeightIndex, weeklyChangeIndex, dailyCalories) {
