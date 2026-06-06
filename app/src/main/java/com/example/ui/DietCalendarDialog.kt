@@ -31,7 +31,8 @@ fun DietCalendarDialog(
     selectedDayStart: Long,
     daySummaries: Map<Long, DaySummary>,
     onDismiss: () -> Unit,
-    onDaySelected: (Long) -> Unit
+    onDaySelected: (Long) -> Unit,
+    onFutureDayBlocked: (() -> Unit)? = null
 ) {
     val initialCal = Calendar.getInstance().apply { timeInMillis = selectedDayStart }
     var viewYear by remember { mutableIntStateOf(initialCal.get(Calendar.YEAR)) }
@@ -122,7 +123,8 @@ fun DietCalendarDialog(
                             viewMonth = viewMonth,
                             selectedDayStart = selectedDayStart,
                             daySummaries = daySummaries,
-                            onDaySelected = onDaySelected
+                            onDaySelected = onDaySelected,
+                            onFutureDayBlocked = onFutureDayBlocked
                         )
                     }
                 }
@@ -142,7 +144,8 @@ private fun MonthViewGrid(
     viewMonth: Int,
     selectedDayStart: Long,
     daySummaries: Map<Long, DaySummary>,
-    onDaySelected: (Long) -> Unit
+    onDaySelected: (Long) -> Unit,
+    onFutureDayBlocked: (() -> Unit)? = null
 ) {
     Column {
         Row(Modifier.fillMaxWidth()) {
@@ -175,15 +178,18 @@ private fun MonthViewGrid(
                     is DietDateUtils.CalendarDayCell.Day -> {
                         val summary = daySummaries[cell.dayStart]
                         val isSelected = cell.dayStart == selectedDayStart
+                        val isFuture = DietDateUtils.isFuture(cell.dayStart)
                         val hasData = summary?.hasData == true
                         val goalMet = summary?.goalMet == true
                         val bg = when {
+                            isFuture -> SurfaceContainerHighest.copy(0.15f)
                             isSelected -> Primary
                             goalMet -> Secondary.copy(0.85f)
                             hasData -> Secondary.copy(0.18f)
                             else -> SurfaceContainerHighest.copy(0.35f)
                         }
                         val textColor = when {
+                            isFuture -> OnSurfaceVariant.copy(0.35f)
                             isSelected || goalMet -> OnPrimary
                             else -> OnSurface
                         }
@@ -196,7 +202,10 @@ private fun MonthViewGrid(
                                     if (isSelected) Modifier.border(1.dp, Primary, RoundedCornerShape(8.dp))
                                     else Modifier
                                 )
-                                .clickable { onDaySelected(cell.dayStart) },
+                                .clickable {
+                                    if (isFuture) onFutureDayBlocked?.invoke()
+                                    else onDaySelected(cell.dayStart)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

@@ -14,7 +14,9 @@ data class BundledExerciseEntry(
     val routines: List<String> = emptyList(),
     val defaultSets: Int = 3,
     val defaultReps: Int = 10,
-    val aliases: List<String> = emptyList()
+    val aliases: List<String> = emptyList(),
+    val equipment: String = "",
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -34,9 +36,7 @@ class LocalExerciseRepository(context: Context) {
     fun search(query: String, routineFilter: String? = null): List<ExerciseItem> {
         val q = query.trim().lowercase()
         return allExercises.filter { exercise ->
-            val matchesRoutine = routineFilter.isNullOrBlank() ||
-                exercise.routines.any { it.equals(routineFilter, ignoreCase = true) }
-            if (!matchesRoutine) return@filter false
+            if (!matchesRoutine(exercise, routineFilter)) return@filter false
             if (q.isBlank()) return@filter true
             exercise.name.lowercase().contains(q) ||
                 exercise.exerciseType.lowercase().contains(q) ||
@@ -45,7 +45,10 @@ class LocalExerciseRepository(context: Context) {
     }
 
     fun forRoutine(routine: String): List<ExerciseItem> =
-        allExercises.filter { it.routines.any { r -> r.equals(routine, ignoreCase = true) } }
+        allExercises.filter { matchesRoutine(it, routine) }
+
+    fun cardioExercises(): List<ExerciseItem> =
+        allExercises.filter { it.isCardio || it.exerciseType.equals("Cardio", ignoreCase = true) }
 
     fun findById(id: String): ExerciseItem? = allExercises.find { it.id == id }
 
@@ -55,6 +58,17 @@ class LocalExerciseRepository(context: Context) {
     fun suggestions(routine: String, limit: Int = 12): List<ExerciseItem> =
         forRoutine(routine).take(limit)
 
+    private fun matchesRoutine(exercise: ExerciseItem, routineFilter: String?): Boolean {
+        if (routineFilter.isNullOrBlank()) return true
+        if (exercise.routines.any { it.equals(routineFilter, ignoreCase = true) }) return true
+        if (routineFilter.equals("Cardio", ignoreCase = true) &&
+            exercise.exerciseType.equals("Cardio", ignoreCase = true)
+        ) {
+            return true
+        }
+        return false
+    }
+
     private fun loadExercises(context: Context): List<ExerciseItem> {
         return try {
             val json = context.assets.open("exercises.json").bufferedReader().use { it.readText() }
@@ -63,14 +77,18 @@ class LocalExerciseRepository(context: Context) {
                 .build()
                 .adapter(BundledExercisesFile::class.java)
             adapter.fromJson(json)?.exercises.orEmpty().map { entry ->
+                val isCardio = entry.type.equals("Cardio", ignoreCase = true)
                 ExerciseItem(
                     id = entry.id,
                     name = entry.name,
                     exerciseType = entry.type,
                     routines = entry.routines,
-                    defaultSets = entry.defaultSets,
-                    defaultReps = entry.defaultReps,
-                    aliases = entry.aliases
+                    defaultSets = if (isCardio) 1 else entry.defaultSets,
+                    defaultReps = if (isCardio) 0 else entry.defaultReps,
+                    aliases = entry.aliases,
+                    equipment = entry.equipment,
+                    secondaryMuscles = entry.secondaryMuscles,
+                    isCardio = isCardio
                 )
             }
         } catch (_: Exception) {

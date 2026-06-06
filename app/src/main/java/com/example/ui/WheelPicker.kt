@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -108,15 +109,62 @@ fun WheelPickerField(
 }
 
 @Composable
+fun InlineTimeWheelPicker(
+    hour12: Int,
+    minute: Int,
+    onHourChange: (Int) -> Unit,
+    onMinuteChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val hourItems = remember { (1..12).map { String.format("%02d", it) } }
+    val minuteItems = remember { (0..59).map { String.format("%02d", it) } }
+    val hourIndex = (hour12 - 1).coerceIn(0, 11)
+    val minuteIndex = minute.coerceIn(0, 59)
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        WheelPicker(
+            items = hourItems,
+            selectedIndex = hourIndex,
+            onSelected = { onHourChange(it + 1) },
+            modifier = Modifier.weight(1f),
+            label = null,
+            compact = true
+        )
+        Text(
+            ":",
+            style = Typography.headlineMedium,
+            color = Primary,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        )
+        WheelPicker(
+            items = minuteItems,
+            selectedIndex = minuteIndex,
+            onSelected = onMinuteChange,
+            modifier = Modifier.weight(1f),
+            label = null,
+            compact = true
+        )
+    }
+}
+
+@Composable
 fun WheelPicker(
     items: List<String>,
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    label: String? = null
+    label: String? = null,
+    compact: Boolean = false
 ) {
     if (items.isEmpty()) return
     val safeIndex = selectedIndex.coerceIn(0, items.lastIndex)
+    val itemHeight = if (compact) 40.dp else WheelItemHeight
+    val wheelHeight = if (compact) itemHeight * WheelVisibleRows else WheelHeight
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = safeIndex)
     val flingBehavior = rememberSnapFlingBehavior(
         lazyListState = listState,
@@ -125,12 +173,20 @@ fun WheelPicker(
     val centeredIndex by remember {
         derivedStateOf { listState.centeredItemIndex().coerceIn(0, items.lastIndex) }
     }
-    val contentPadding = PaddingValues(vertical = (WheelHeight - WheelItemHeight) / 2)
+    val contentPadding = PaddingValues(vertical = (wheelHeight - itemHeight) / 2)
 
     LaunchedEffect(safeIndex, items.size) {
         if (listState.centeredItemIndex() != safeIndex) {
             listState.animateScrollToItem(safeIndex)
         }
+    }
+
+    LaunchedEffect(listState, items.size) {
+        snapshotFlow { listState.centeredItemIndex() }
+            .distinctUntilChanged()
+            .collect { index ->
+                if (index in items.indices) onSelected(index)
+            }
     }
 
     LaunchedEffect(listState, items.size) {
@@ -156,16 +212,23 @@ fun WheelPicker(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(WheelHeight)
-                .background(SurfaceContainer, RoundedCornerShape(12.dp)),
+                .height(wheelHeight)
+                .then(if (compact) Modifier else Modifier.background(SurfaceContainer, RoundedCornerShape(12.dp))),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(WheelItemHeight)
-                    .background(Primary.copy(0.12f), RoundedCornerShape(8.dp))
+                    .height(itemHeight)
+                    .background(Primary.copy(if (compact) 0.08f else 0.12f), RoundedCornerShape(8.dp))
             )
+            if (compact) {
+                Column(Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = OutlineVariant.copy(0.45f), thickness = 1.dp)
+                    Spacer(Modifier.height(itemHeight - 2.dp))
+                    HorizontalDivider(color = OutlineVariant.copy(0.45f), thickness = 1.dp)
+                }
+            }
             LazyColumn(
                 state = listState,
                 flingBehavior = flingBehavior,
@@ -178,16 +241,16 @@ fun WheelPicker(
                     Text(
                         text = items[index],
                         style = Typography.bodyLarge.copy(
-                            fontSize = if (isSelected) 20.sp else 16.sp,
+                            fontSize = if (isSelected) if (compact) 22.sp else 20.sp else if (compact) 15.sp else 16.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         ),
                         color = if (isSelected) Primary else OnSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(WheelItemHeight)
+                            .height(itemHeight)
                             .wrapContentHeight(Alignment.CenterVertically)
-                            .alpha(if (isSelected) 1f else 0.5f)
+                            .alpha(if (isSelected) 1f else 0.45f)
                     )
                 }
             }

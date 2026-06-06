@@ -7,8 +7,11 @@ data class ExerciseItem(
     val routines: List<String> = emptyList(),
     val defaultSets: Int = 3,
     val defaultReps: Int = 10,
+    val equipment: String = "",
+    val secondaryMuscles: List<String> = emptyList(),
     val aliases: List<String> = emptyList(),
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val isCardio: Boolean = false
 )
 
 data class WorkoutExerciseGroup(

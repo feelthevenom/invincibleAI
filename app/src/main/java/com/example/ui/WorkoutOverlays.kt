@@ -46,7 +46,9 @@ fun ExerciseSearchOverlay(
     routine: String,
     logDayStart: Long,
     viewModel: GymViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    pickOnly: Boolean = false,
+    onExercisePicked: ((ExerciseItem) -> Unit)? = null
 ) {
     var page by remember { mutableStateOf<ExerciseSheetPage>(ExerciseSheetPage.Search) }
     val searchState by viewModel.exerciseSearchState.collectAsState()
@@ -114,13 +116,19 @@ fun ExerciseSearchOverlay(
                         searchState = searchState,
                         customExercises = customExercises,
                         routine = routine,
+                        aiEnabled = viewModel.isAiConfigured(),
                         onQueryChange = { viewModel.onExerciseSearchQueryChanged(it, routine) },
                         onCreateCustom = {
                             page = ExerciseSheetPage.Custom(searchState.query.trim())
                         },
+                        onGenerateAi = { viewModel.generateAiExercisesForRoutine(routine) },
                         onExerciseSelected = { exercise ->
-                            viewModel.addExerciseToDay(exercise, dayLabel, logDayStart)
-                            onDismiss()
+                            if (pickOnly && onExercisePicked != null) {
+                                onExercisePicked(exercise)
+                            } else {
+                                viewModel.addExerciseToDay(exercise, dayLabel, logDayStart)
+                                onDismiss()
+                            }
                         },
                         viewModel = viewModel
                     )
@@ -129,6 +137,8 @@ fun ExerciseSearchOverlay(
                         initialName = current.prefilledName,
                         dayLabel = dayLabel,
                         logDayStart = logDayStart,
+                        pickOnly = pickOnly,
+                        onPicked = onExercisePicked,
                         onSaved = { onDismiss() }
                     )
                 }
@@ -142,15 +152,18 @@ private fun ExerciseSearchPage(
     searchState: ExerciseSearchUiState,
     customExercises: List<CustomExercise>,
     routine: String,
+    aiEnabled: Boolean,
     onQueryChange: (String) -> Unit,
     onCreateCustom: () -> Unit,
+    onGenerateAi: () -> Unit,
     onExerciseSelected: (ExerciseItem) -> Unit,
     viewModel: GymViewModel
 ) {
     var exerciseToDelete by remember { mutableStateOf<CustomExercise?>(null) }
-    var aiResults by remember { mutableStateOf<List<ExerciseItem>>(emptyList()) }
-    var isAiLoading by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val isCardioRoutine = routine.equals("Cardio", ignoreCase = true)
+    var aiDraftNames by remember(searchState.aiSuggestions) {
+        mutableStateOf(searchState.aiSuggestions.associate { it.id to it.name })
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -161,33 +174,6 @@ private fun ExerciseSearchPage(
                 .padding(horizontal = 20.dp),
             placeholder = { Text("Search exercises… e.g. bench press, curl", color = OnSurfaceVariant) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = Primary) },
-            trailingIcon = {
-                if (searchState.query.isNotBlank() && viewModel.isAiConfigured()) {
-                    IconButton(
-                        onClick = {
-                            isAiLoading = true
-                            scope.launch {
-                                aiResults = viewModel.generateExerciseSuggestions(
-                                    searchState.query.trim(),
-                                    routine
-                                )
-                                isAiLoading = false
-                            }
-                        },
-                        enabled = !isAiLoading
-                    ) {
-                        if (isAiLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = Primary
-                            )
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, null, tint = Primary)
-                        }
-                    }
-                }
-            },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -214,7 +200,7 @@ private fun ExerciseSearchPage(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "custom_create") {
@@ -222,7 +208,7 @@ private fun ExerciseSearchPage(
                 ExerciseListItem(
                     name = "Create Custom Exercise",
                     subtitle = if (query.isNotBlank()) {
-                        "Add \"$query\" — name pre-filled, edit or use AI"
+                        "Add \"$query\" — name pre-filled"
                     } else {
                         "Add your own exercise with muscle type"
                     },
@@ -232,6 +218,48 @@ private fun ExerciseSearchPage(
                 )
             }
 
+            item(key = "ai_generate") {
+                OutlinedButton(
+                    onClick = onGenerateAi,
+                    enabled = aiEnabled && !searchState.aiLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (searchState.aiLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Generating…")
+                    } else {
+                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp), tint = Primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("AI Suggest Exercises (up to 5)", color = Primary)
+                    }
+                }
+                searchState.aiError?.let { err ->
+                    Text(err, color = Error, style = Typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+
+            if (isCardioRoutine && searchState.suggestions.isNotEmpty() && searchState.query.isBlank()) {
+                item(key = "cardio_header") {
+                    WorkoutSectionHeader("CARDIO EXERCISES")
+                }
+                items(
+                    searchState.suggestions.filter { it.isCardio || it.exerciseType.equals("Cardio", true) },
+                    key = { "cardio_${it.id}" }
+                ) { exercise ->
+                    ExerciseListItem(
+                        name = exercise.name,
+                        subtitle = "Cardio · timer & calories",
+                        onClick = { onExerciseSelected(exercise.copy(isCardio = true)) }
+                    )
+                }
+            }
+
             if (customExercises.isNotEmpty()) {
                 item(key = "custom_header") {
                     WorkoutSectionHeader("YOUR CUSTOM EXERCISES")
@@ -239,17 +267,18 @@ private fun ExerciseSearchPage(
                 items(customExercises, key = { "custom_${it.id}" }) { ce ->
                     ExerciseListItem(
                         name = ce.name,
-                        subtitle = "${ce.exerciseType} · ${ce.defaultSets} sets × ${ce.defaultReps} reps",
+                        subtitle = if (ce.isCardio) "Cardio · timer & calories" else "${ce.exerciseType} · ${ce.defaultSets} sets × ${ce.defaultReps} reps",
                         icon = Icons.Default.Delete,
                         onClick = {
                             onExerciseSelected(
                                 ExerciseItem(
                                     id = "custom_${ce.id}",
                                     name = ce.name,
-                                    exerciseType = ce.exerciseType,
-                                    defaultSets = ce.defaultSets,
-                                    defaultReps = ce.defaultReps,
-                                    isCustom = true
+                                    exerciseType = if (ce.isCardio) "Cardio" else ce.exerciseType,
+                                    defaultSets = if (ce.isCardio) 1 else ce.defaultSets,
+                                    defaultReps = if (ce.isCardio) 0 else ce.defaultReps,
+                                    isCustom = true,
+                                    isCardio = ce.isCardio
                                 )
                             )
                         },
@@ -258,29 +287,39 @@ private fun ExerciseSearchPage(
                 }
             }
 
-            if (aiResults.isNotEmpty()) {
-                item(key = "ai_header") {
-                    WorkoutSectionHeader("AI SUGGESTIONS")
+            val localLabel = if (searchState.query.isBlank()) "SUGGESTED FOR $routine" else "SEARCH RESULTS"
+            if (searchState.localResults.isNotEmpty() && !(isCardioRoutine && searchState.query.isBlank())) {
+                item(key = "local_header") {
+                    WorkoutSectionHeader(localLabel)
                 }
-                items(aiResults, key = { it.id }) { exercise ->
+                items(searchState.localResults, key = { it.id }) { exercise ->
+                    val subtitle = if (exercise.isCardio || exercise.exerciseType.equals("Cardio", true)) {
+                        "Cardio · timer & calories"
+                    } else {
+                        "${exercise.exerciseType} · ${exercise.defaultSets} sets × ${exercise.defaultReps} reps"
+                    }
                     ExerciseListItem(
                         name = exercise.name,
-                        subtitle = "${exercise.exerciseType} · ${exercise.defaultSets}×${exercise.defaultReps} · AI",
+                        subtitle = subtitle,
                         onClick = { onExerciseSelected(exercise) }
                     )
                 }
             }
 
-            val localLabel = if (searchState.query.isBlank()) "SUGGESTED FOR $routine" else "SEARCH RESULTS"
-            if (searchState.localResults.isNotEmpty()) {
-                item(key = "local_header") {
-                    WorkoutSectionHeader(localLabel)
+            if (searchState.aiSuggestions.isNotEmpty()) {
+                item(key = "ai_header") {
+                    WorkoutSectionHeader("AI SUGGESTIONS · tap Add or edit name")
                 }
-                items(searchState.localResults, key = { it.id }) { exercise ->
-                    ExerciseListItem(
-                        name = exercise.name,
-                        subtitle = "${exercise.exerciseType} · ${exercise.defaultSets} sets × ${exercise.defaultReps} reps",
-                        onClick = { onExerciseSelected(exercise) }
+                items(searchState.aiSuggestions, key = { it.id }) { exercise ->
+                    AiExerciseSuggestionCard(
+                        exercise = exercise,
+                        name = aiDraftNames[exercise.id] ?: exercise.name,
+                        onNameChange = { aiDraftNames = aiDraftNames + (exercise.id to it) },
+                        onAdd = {
+                            val finalName = (aiDraftNames[exercise.id] ?: exercise.name).trim()
+                            if (finalName.isBlank()) return@AiExerciseSuggestionCard
+                            onExerciseSelected(exercise.copy(name = finalName))
+                        }
                     )
                 }
             }
@@ -312,41 +351,17 @@ private fun CustomExerciseCreatePage(
     initialName: String,
     dayLabel: String,
     logDayStart: Long,
+    pickOnly: Boolean = false,
+    onPicked: ((ExerciseItem) -> Unit)? = null,
     onSaved: () -> Unit
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
+    var isCardio by remember { mutableStateOf(false) }
     var exerciseType by remember { mutableStateOf("Chest") }
     var sets by remember { mutableStateOf("3") }
     var reps by remember { mutableStateOf("10") }
     var weight by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
-    var isAiLoading by remember { mutableStateOf(false) }
-    var aiSuggestions by remember { mutableStateOf<List<ExerciseItem>>(emptyList()) }
-    var showAiPicker by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val routine = remember(dayLabel) {
-        when {
-            dayLabel.contains("Push", ignoreCase = true) -> "Push"
-            dayLabel.contains("Pull", ignoreCase = true) -> "Pull"
-            dayLabel.contains("Leg", ignoreCase = true) -> "Legs"
-            dayLabel.contains("Upper", ignoreCase = true) -> "Upper"
-            dayLabel.contains("Lower", ignoreCase = true) -> "Lower"
-            else -> "Full Body"
-        }
-    }
-
-    fun triggerAiAutofill() {
-        if (name.isBlank() || !viewModel.isAiConfigured()) return
-        isAiLoading = true
-        scope.launch {
-            val suggestions = viewModel.generateExerciseSuggestions(name.trim(), routine)
-            if (suggestions.isNotEmpty()) {
-                aiSuggestions = suggestions
-                showAiPicker = true
-            }
-            isAiLoading = false
-        }
-    }
 
     Column(
         Modifier
@@ -364,72 +379,75 @@ private fun CustomExerciseCreatePage(
             shape = RoundedCornerShape(12.dp)
         )
 
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-            OutlinedTextField(
-                value = exerciseType,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Muscle Type") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                EXERCISE_TYPES.forEach { type ->
-                    DropdownMenuItem(
-                        text = { Text(type) },
-                        onClick = { exerciseType = type; expanded = false }
-                    )
-                }
+        Text("Cardio exercise", style = Typography.labelMedium, color = OnSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = isCardio, onClick = { isCardio = true })
+                Text("On", color = OnSurface)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = !isCardio, onClick = { isCardio = false })
+                Text("Off", color = OnSurface)
             }
         }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = sets,
-                onValueChange = { if (it.all { c -> c.isDigit() }) sets = it },
-                label = { Text("Sets") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-            OutlinedTextField(
-                value = reps,
-                onValueChange = { if (it.all { c -> c.isDigit() }) reps = it },
-                label = { Text("Reps") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+        if (isCardio) {
+            Text(
+                "Cardio uses a timer and calories — no sets, reps, or weight.",
+                style = Typography.bodySmall,
+                color = OnSurfaceVariant
             )
         }
 
-        OutlinedTextField(
-            value = weight,
-            onValueChange = { v ->
-                if (v.isEmpty() || v.matches(Regex("^\\d*\\.?\\d*$"))) weight = v
-            },
-            label = { Text("Default Weight (kg)") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
+        if (!isCardio) {
+            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                OutlinedTextField(
+                    value = exerciseType,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Muscle Type") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    EXERCISE_TYPES.filter { !it.equals("Cardio", ignoreCase = true) }.forEach { type ->
+                        DropdownMenuItem(
+                            text = { Text(type) },
+                            onClick = { exerciseType = type; expanded = false }
+                        )
+                    }
+                }
+            }
 
-        if (viewModel.isAiConfigured()) {
-            Button(
-                onClick = { triggerAiAutofill() },
-                enabled = name.isNotBlank() && !isAiLoading,
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = sets,
+                    onValueChange = { if (it.all { c -> c.isDigit() }) sets = it },
+                    label = { Text("Sets") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = reps,
+                    onValueChange = { if (it.all { c -> c.isDigit() }) reps = it },
+                    label = { Text("Reps") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            OutlinedTextField(
+                value = weight,
+                onValueChange = { v ->
+                    if (v.isEmpty() || v.matches(Regex("^\\d*\\.?\\d*$"))) weight = v
+                },
+                label = { Text("Default Weight (kg)") },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryContainer, contentColor = OnPrimaryContainer)
-            ) {
-                if (isAiLoading) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                } else {
-                    Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text("AI Autofill")
-            }
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
         }
 
         Button(
@@ -437,50 +455,30 @@ private fun CustomExerciseCreatePage(
                 if (name.isBlank()) return@Button
                 val entity = CustomExercise(
                     name = name.trim(),
-                    exerciseType = exerciseType,
-                    defaultSets = sets.toIntOrNull()?.coerceIn(1, 20) ?: 3,
-                    defaultReps = reps.toIntOrNull()?.coerceIn(1, 100) ?: 10,
-                    defaultWeight = weight.toFloatOrNull() ?: 0f
+                    exerciseType = if (isCardio) "Cardio" else exerciseType,
+                    defaultSets = if (isCardio) 1 else sets.toIntOrNull()?.coerceIn(1, 20) ?: 3,
+                    defaultReps = if (isCardio) 0 else reps.toIntOrNull()?.coerceIn(1, 100) ?: 10,
+                    defaultWeight = if (isCardio) 0f else weight.toFloatOrNull() ?: 0f,
+                    isCardio = isCardio
                 )
-                viewModel.addCustomExerciseAndReturn(entity, dayLabel, logDayStart) { onSaved() }
+                viewModel.addCustomExerciseAndReturn(
+                    exercise = entity,
+                    dayLabel = dayLabel,
+                    logDayStart = logDayStart,
+                    addToWorkout = !pickOnly
+                ) { item ->
+                    if (pickOnly && onPicked != null) {
+                        onPicked(item)
+                    }
+                    onSaved()
+                }
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(12.dp),
             enabled = name.isNotBlank()
         ) {
-            Text("Save & Add to Workout")
+            Text(if (pickOnly) "Save & Add to Routine" else "Save & Add to Workout")
         }
-    }
-
-    if (showAiPicker && aiSuggestions.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { showAiPicker = false },
-            title = { Text("AI Suggestions") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    aiSuggestions.forEach { item ->
-                        TextButton(
-                            onClick = {
-                                name = item.name
-                                exerciseType = item.exerciseType
-                                sets = item.defaultSets.toString()
-                                reps = item.defaultReps.toString()
-                                showAiPicker = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                "${item.name} (${item.exerciseType}) · ${item.defaultSets}×${item.defaultReps}",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showAiPicker = false }) { Text("Close") }
-            }
-        )
     }
 }
 
@@ -545,6 +543,52 @@ fun EditExerciseDialog(
             }
         }
     )
+}
+
+@Composable
+private fun AiExerciseSuggestionCard(
+    exercise: ExerciseItem,
+    name: String,
+    onNameChange: (String) -> Unit,
+    onAdd: () -> Unit
+) {
+    val isCardio = exercise.isCardio || exercise.exerciseType.equals("Cardio", ignoreCase = true)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SurfaceContainerHighest.copy(0.35f), RoundedCornerShape(12.dp))
+            .border(1.dp, Primary.copy(0.25f), RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = { Text("Exercise name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp)
+        )
+        Text(
+            if (isCardio) {
+                "Cardio · timer & calories"
+            } else {
+                "${exercise.exerciseType} · ${exercise.defaultSets} sets × ${exercise.defaultReps} reps"
+            },
+            style = Typography.bodySmall,
+            color = OnSurfaceVariant
+        )
+        Button(
+            onClick = onAdd,
+            enabled = name.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Add to ${if (isCardio) "cardio" else "workout"}")
+        }
+    }
 }
 
 @Composable

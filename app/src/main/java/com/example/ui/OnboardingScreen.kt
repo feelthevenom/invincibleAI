@@ -72,6 +72,24 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         ProfileValidation.cmFromFeetInches(3 + feetIndex, inchIndex)
     }
 
+    fun syncImperialFromCm(cm: Int) {
+        val (feet, inches) = ProfileValidation.feetInchesFromCm(cm)
+        feetIndex = (feet - 3).coerceIn(0, feetItems().lastIndex)
+        inchIndex = inches.coerceIn(0, inchItems().lastIndex)
+    }
+
+    fun syncCmFromImperial() {
+        val cm = ProfileValidation.cmFromFeetInches(3 + feetIndex, inchIndex)
+        heightCmIndex = (cm - ProfileValidation.MIN_HEIGHT_CM)
+            .coerceIn(0, cmHeightItems().lastIndex)
+    }
+
+    fun onHeightUnitToggle(toMetric: Boolean) {
+        if (toMetric && !useMetricHeight) syncCmFromImperial()
+        else if (!toMetric && useMetricHeight) syncImperialFromCm(heightCm())
+        useMetricHeight = toMetric
+    }
+
     val weightRange = remember(heightCm()) {
         ProfileValidation.minReasonableWeight(heightCm()) to ProfileValidation.maxReasonableWeight(heightCm())
     }
@@ -84,7 +102,6 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
     var carbs by remember { mutableStateOf("") }
     var fat by remember { mutableStateOf("") }
     var fiber by remember { mutableStateOf("") }
-    var workoutDays by remember { mutableStateOf("3") }
 
     var targetChangePerWeek by remember { mutableFloatStateOf(0.5f) }
     var weeklyChangeIndex by remember { mutableIntStateOf(0) }
@@ -154,7 +171,18 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         fiber = macros.fiber.toString()
     }
 
-    LaunchedEffect(step, goal, currentWeightIndex, targetWeightIndex, weeklyChangeIndex, dailyCalories) {
+    LaunchedEffect(goal, currentWeightIndex, targetWeightIndex, activityLevel, ageIndex, gender) {
+        val cw = currentWeightKg()
+        val items = weeklyChangeItems(
+            ProfileValidation.minWeeklyChangeKg(goal),
+            ProfileValidation.maxWeeklyChangeKg(goal, cw)
+        )
+        if (weeklyChangeIndex >= items.size) weeklyChangeIndex = 0
+        if (goal == "Maintain Weight") weeklyChangeIndex = 0
+        recalculateStep5Metrics()
+    }
+
+    LaunchedEffect(step, goal, currentWeightIndex, targetWeightIndex, weeklyChangeIndex) {
         progress = step / totalSteps.toFloat()
         when (step) {
             3 -> {
@@ -165,23 +193,12 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
             }
             4 -> {
                 val cw = currentWeightKg()
-                val a = ProfileValidation.MIN_AGE + ageIndex
-                val h = heightCm()
-                val cal = FitnessCalculator.dailyCalories(gender, cw, h, a, activityLevel, goal)
-                val macros = FitnessCalculator.calculateMacros(cw, cal, goal)
-                if (dailyCalories.isBlank()) dailyCalories = cal.toString()
-                if (protein.isBlank()) protein = macros.protein.toString()
-                if (carbs.isBlank()) carbs = macros.carbs.toString()
-                if (fat.isBlank()) fat = macros.fat.toString()
-                if (fiber.isBlank()) fiber = macros.fiber.toString()
-            }
-            5 -> {
-                val cw = currentWeightKg()
                 val items = weeklyChangeItems(ProfileValidation.minWeeklyChangeKg(goal), ProfileValidation.maxWeeklyChangeKg(goal, cw))
                 if (weeklyChangeIndex >= items.size) weeklyChangeIndex = 0
                 if (goal == "Maintain Weight") weeklyChangeIndex = 0
                 recalculateStep5Metrics()
             }
+            5 -> recalculateStep5Metrics()
         }
     }
 
@@ -215,9 +232,8 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         2 -> activityLevel.isNotBlank() && goal.isNotBlank()
         3 -> ProfileValidation.isValidWeight(currentWeightKg(), heightCm()) &&
             ProfileValidation.isValidTargetWeight(targetWeightKg(), currentWeightKg(), heightCm(), ProfileValidation.MIN_AGE + ageIndex)
-        4 -> dailyCalories.toIntOrNull()?.let { it in 800..6000 } == true
-        5 -> workoutDays.toIntOrNull()?.let { it in 1..7 } == true &&
-            ProfileValidation.validateWeeklyChange(goal, currentWeightKg(), targetChangePerWeek).isValid
+        4 -> ProfileValidation.validateWeeklyChange(goal, currentWeightKg(), targetChangePerWeek).isValid
+        5 -> dailyCalories.toIntOrNull()?.let { it in 800..6000 } == true
         6 -> selectedCuisines.isNotEmpty()
         else -> false
     }
@@ -238,7 +254,7 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                 carbs = carbs.toIntOrNull() ?: 0,
                 fat = fat.toIntOrNull() ?: 0,
                 fiber = fiber.toIntOrNull() ?: 0,
-                workoutDaysPerWeek = workoutDays.toIntOrNull() ?: 3,
+                workoutDaysPerWeek = 0,
                 targetWeightChangePerWeek = targetChangePerWeek,
                 weeksToGoal = weeksToGoal,
                 maintenanceCalories = maintenanceCalories,
@@ -267,7 +283,12 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                     Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(Primary))
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(top = 8.dp)
+                        .height(56.dp)
+                        .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -284,7 +305,14 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
             ) {
                 when (step) {
                     1 -> {
-                        Step1Pickers(ageIndex, { ageIndex = it }, gender, { gender = it }, useMetricHeight, { useMetricHeight = it }, heightCmIndex, { heightCmIndex = it }, feetIndex, { feetIndex = it }, inchIndex, { inchIndex = it })
+                        Step1Pickers(
+                            ageIndex, { ageIndex = it },
+                            gender, { gender = it },
+                            useMetricHeight, ::onHeightUnitToggle,
+                            heightCmIndex, { heightCmIndex = it },
+                            feetIndex, { feetIndex = it },
+                            inchIndex, { inchIndex = it }
+                        )
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider(color = OutlineVariant.copy(0.3f))
                         Spacer(modifier = Modifier.height(16.dp))
@@ -332,8 +360,8 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                     }
                     2 -> Step2Content(activityLevel, { activityLevel = it }, goal, { goal = it; recalculateTargetWeight() })
                     3 -> Step3Pickers(weightItems, currentWeightIndex, { currentWeightIndex = it; recalculateTargetWeight() }, targetWeightIndex, { targetWeightIndex = it }, heightCm())
-                    4 -> Step4Content(dailyCalories, { v -> dailyCalories = v; val cal = v.toIntOrNull(); val cw = currentWeightKg(); if (cal != null) { val m = FitnessCalculator.calculateMacros(cw, cal, goal); protein = m.protein.toString(); carbs = m.carbs.toString(); fat = m.fat.toString(); fiber = m.fiber.toString() } }, protein, { v -> rebalanceMacro(FitnessCalculator.MacroField.PROTEIN, v.toIntOrNull() ?: 0) }, carbs, { v -> rebalanceMacro(FitnessCalculator.MacroField.CARBS, v.toIntOrNull() ?: 0) }, fat, { v -> rebalanceMacro(FitnessCalculator.MacroField.FAT, v.toIntOrNull() ?: 0) }, fiber, { v -> rebalanceMacro(FitnessCalculator.MacroField.FIBER, v.toIntOrNull() ?: 0) })
-                    5 -> Step5Pickers(workoutDays, { workoutDays = it }, goal, currentWeightKg(), weeklyChangeIndex, { weeklyChangeIndex = it; recalculateStep5Metrics() }, weeklyWarning, weeksToGoal, maintenanceCalories, calorieAdjustmentDaily, calorieAdjustmentWeekly, targetChangePerWeek)
+                    4 -> Step5Pickers(goal, currentWeightKg(), weeklyChangeIndex, { weeklyChangeIndex = it; recalculateStep5Metrics() }, weeklyWarning, weeksToGoal, maintenanceCalories, calorieAdjustmentDaily, calorieAdjustmentWeekly, targetChangePerWeek, dailyCalories)
+                    5 -> Step4Content(dailyCalories, { v -> dailyCalories = v; val cal = v.toIntOrNull(); val cw = currentWeightKg(); if (cal != null) { val m = FitnessCalculator.calculateMacros(cw, cal, goal); protein = m.protein.toString(); carbs = m.carbs.toString(); fat = m.fat.toString(); fiber = m.fiber.toString() } }, protein, { v -> rebalanceMacro(FitnessCalculator.MacroField.PROTEIN, v.toIntOrNull() ?: 0) }, carbs, { v -> rebalanceMacro(FitnessCalculator.MacroField.CARBS, v.toIntOrNull() ?: 0) }, fat, { v -> rebalanceMacro(FitnessCalculator.MacroField.FAT, v.toIntOrNull() ?: 0) }, fiber, { v -> rebalanceMacro(FitnessCalculator.MacroField.FIBER, v.toIntOrNull() ?: 0) })
                     6 -> Step6Cuisine(selectedCuisines, { selectedCuisines = it })
                 }
             }
@@ -364,21 +392,44 @@ private fun Step1Pickers(
 ) {
     Text("Tell us about yourself", style = Typography.headlineLarge, color = Primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Scroll to select your age and height.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Tap age and height to adjust your profile.", style = Typography.bodyMedium, color = OnSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        WheelPicker(items = ageItems(), selectedIndex = ageIndex, onSelected = onAgeIndex, modifier = Modifier.weight(1f), label = "Age")
+        WheelPickerField(
+            label = "Age",
+            items = ageItems(),
+            selectedIndex = ageIndex,
+            onConfirm = onAgeIndex,
+            modifier = Modifier.weight(1f)
+        )
         OnboardingDropdown("Gender", gender, FitnessCalculator.genders, onGender, Modifier.weight(1f))
     }
     Spacer(modifier = Modifier.height(20.dp))
     HeightUnitToggle(useMetric, onMetricToggle)
     Spacer(modifier = Modifier.height(12.dp))
     if (useMetric) {
-        WheelPicker(items = cmHeightItems(), selectedIndex = heightCmIndex, onSelected = onHeightCmIndex, label = "Height")
+        WheelPickerField(
+            label = "Height",
+            items = cmHeightItems(),
+            selectedIndex = heightCmIndex,
+            onConfirm = onHeightCmIndex
+        )
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            WheelPicker(items = feetItems(), selectedIndex = feetIndex, onSelected = onFeetIndex, modifier = Modifier.weight(1f), label = "Feet")
-            WheelPicker(items = inchItems(), selectedIndex = inchIndex, onSelected = onInchIndex, modifier = Modifier.weight(1f), label = "Inches")
+            WheelPickerField(
+                label = "Feet",
+                items = feetItems(),
+                selectedIndex = feetIndex,
+                onConfirm = onFeetIndex,
+                modifier = Modifier.weight(1f)
+            )
+            WheelPickerField(
+                label = "Inches",
+                items = inchItems(),
+                selectedIndex = inchIndex,
+                onConfirm = onInchIndex,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -401,20 +452,18 @@ private fun Step3Pickers(
 
 @Composable
 private fun Step5Pickers(
-    workoutDays: String, onWorkoutDaysChange: (String) -> Unit,
     goal: String, currentWeight: Float,
     weeklyIndex: Int, onWeeklyIndex: (Int) -> Unit,
     weeklyWarning: String?,
     weeksToGoal: Int, maintenanceCalories: Int,
     calorieAdjustmentDaily: Int, calorieAdjustmentWeekly: Int,
-    targetChangePerWeek: Float
+    targetChangePerWeek: Float,
+    dailyCalories: String
 ) {
-    Text("Workout & timeline", style = Typography.headlineLarge, color = Primary)
+    Text("Timeline & calories", style = Typography.headlineLarge, color = Primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Adjust your weekly target within safe limits.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Adjust your weekly target within safe limits. Workout schedule is set in the next step.", style = Typography.bodyMedium, color = OnSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
-    OnboardingTextField("Workout Days Per Week", workoutDays, { v -> if (v.all { it.isDigit() } && (v.isEmpty() || v.toIntOrNull()?.let { it <= 7 } == true)) onWorkoutDaysChange(v) }, suffix = "days")
-    Spacer(modifier = Modifier.height(20.dp))
     val weeklyItems = weeklyChangeItems(ProfileValidation.minWeeklyChangeKg(goal), ProfileValidation.maxWeeklyChangeKg(goal, currentWeight))
     if (goal != "Maintain Weight" && weeklyItems.isNotEmpty()) {
         Text("TARGET WEIGHT CHANGE / WEEK", style = Typography.labelMedium, color = OnSurfaceVariant)
@@ -438,6 +487,8 @@ private fun Step5Pickers(
     Spacer(modifier = Modifier.height(12.dp))
     val adjLabel = if (calorieAdjustmentDaily < 0) "Calorie Deficit" else if (calorieAdjustmentDaily > 0) "Calorie Surplus" else "Calorie Balance"
     OnboardingInfoCard(adjLabel, "${abs(calorieAdjustmentDaily)} kcal/day", "Weekly: ${abs(calorieAdjustmentWeekly)} kcal", highlight = calorieAdjustmentDaily != 0)
+    Spacer(modifier = Modifier.height(12.dp))
+    OnboardingInfoCard("Daily Calorie Target", "${dailyCalories.toIntOrNull() ?: maintenanceCalories} kcal", "Based on your goal and weekly rate", highlight = true)
 }
 
 @Composable
@@ -476,7 +527,7 @@ private fun Step2Content(
     Text("SELECT PRIMARY GOAL", style = Typography.labelMedium, color = OnSurfaceVariant)
     Spacer(modifier = Modifier.height(12.dp))
     FitnessCalculator.goals.forEach { g ->
-        GoalCard(title = g, isSelected = goal == g) { onGoalChange(g) }
+        GoalCard(title = g, isSelected = goal == g, icon = GoalIcons.iconFor(g)) { onGoalChange(g) }
         Spacer(modifier = Modifier.height(8.dp))
     }
 }

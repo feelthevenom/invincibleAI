@@ -23,6 +23,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.GymViewModel
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import com.example.data.DietDateUtils
 import com.example.data.MealEntry
 import com.example.data.MealTypes
@@ -48,6 +50,13 @@ fun DietTabContent(
     var dateTab by remember { mutableStateOf(DietDateTab.Today) }
     var selectedDayStart by remember { mutableLongStateOf(DietDateUtils.startOfTodayMillis()) }
     var showCalendar by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val emptySnapshots = remember { emptyList<com.example.data.DailyGoalSnapshot>() }
+    val goalSnapshots = if (viewModel != null) {
+        val gs by viewModel.allGoalSnapshots.collectAsState()
+        gs
+    } else emptySnapshots
 
     LaunchedEffect(dateTab) {
         selectedDayStart = when (dateTab) {
@@ -60,17 +69,24 @@ fun DietTabContent(
     val dayMeals = remember(meals, selectedDayStart) {
         DietDateUtils.mealsForDay(meals, selectedDayStart)
     }
-    val daySummaries = remember(meals, profile.dailyCalories) {
-        DietDateUtils.summarizeDays(meals, profile.dailyCalories.coerceAtLeast(1))
+    val daySummaries = remember(meals, goalSnapshots, profile.dailyCalories) {
+        if (viewModel != null) {
+            DietDateUtils.summarizeDays(meals) { day -> viewModel.dailyCaloriesForDay(day, goalSnapshots) }
+        } else {
+            DietDateUtils.summarizeDays(meals, profile.dailyCalories.coerceAtLeast(1))
+        }
     }
     val isToday = DietDateUtils.isToday(selectedDayStart)
 
-    val dailyGoal = profile.dailyCalories.coerceAtLeast(1)
+    val dayProfile = remember(selectedDayStart, goalSnapshots, profile) {
+        viewModel?.profileForDay(selectedDayStart, goalSnapshots) ?: profile
+    }
+    val dailyGoal = dayProfile.dailyCalories.coerceAtLeast(1)
     val totalConsumed = dayMeals.sumOf { it.calories }
-    val remaining = (dailyGoal - totalConsumed).coerceAtLeast(0)
+    val rawRemaining = dailyGoal - totalConsumed
     val dailyProgress = if (dailyGoal > 0) (totalConsumed.toFloat() / dailyGoal).coerceIn(0f, 1f) else 0f
 
-    val budgets = remember(profile) { MealTypes.allBudgets(profile) }
+    val budgets = remember(dayProfile) { MealTypes.allBudgets(dayProfile) }
 
     Column(
         modifier = Modifier
@@ -144,23 +160,36 @@ fun DietTabContent(
                 .padding(16.dp)
         ) {
             Column {
-                Text("REMAINING", style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.8f))
+                Text("TODAY'S INTAKE", style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.8f))
                 Row(
                     verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        "%,d".format(remaining),
-                        style = Typography.displayMedium.copy(fontSize = 32.sp),
-                        color = Secondary
-                    )
-                    Text(
-                        "Goal: %,d kcal".format(dailyGoal),
-                        style = Typography.labelMedium,
-                        color = OnSurfaceVariant.copy(0.8f)
-                    )
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            "%,d".format(totalConsumed),
+                            style = Typography.displayMedium.copy(fontSize = 32.sp),
+                            color = if (rawRemaining < 0) Error else Secondary
+                        )
+                        Text(
+                            " / %,d kcal".format(dailyGoal),
+                            style = Typography.titleMedium,
+                            color = OnSurfaceVariant.copy(0.8f),
+                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                        )
+                    }
                 }
+                Text(
+                    if (rawRemaining >= 0) {
+                        "%,d kcal remaining".format(rawRemaining)
+                    } else {
+                        "%,d kcal over goal".format(-rawRemaining)
+                    },
+                    style = Typography.labelMedium,
+                    color = if (rawRemaining >= 0) OnSurfaceVariant.copy(0.7f) else Error,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(
                     Modifier
@@ -224,6 +253,9 @@ fun DietTabContent(
                 selectedDayStart = day
                 dateTab = DietDateTab.Calendar
                 showCalendar = false
+            },
+            onFutureDayBlocked = {
+                Toast.makeText(context, "You can't log entries for future dates.", Toast.LENGTH_SHORT).show()
             }
         )
     }

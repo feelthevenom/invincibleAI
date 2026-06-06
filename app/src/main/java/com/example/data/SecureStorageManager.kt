@@ -57,9 +57,22 @@ class SecureStorageManager(context: Context) {
         sharedPreferences.edit().remove(KEY_GROQ_API).apply()
     }
 
+    fun getOpenRouterApiKey(): String? {
+        return sharedPreferences.getString(KEY_OPENROUTER_API, null)
+    }
+
+    fun saveOpenRouterApiKey(apiKey: String) {
+        sharedPreferences.edit().putString(KEY_OPENROUTER_API, apiKey).apply()
+    }
+
+    fun clearOpenRouterApiKey() {
+        sharedPreferences.edit().remove(KEY_OPENROUTER_API).apply()
+    }
+
     companion object {
         private const val KEY_GEMINI_API = "gemini_api_key"
         private const val KEY_HF_TOKEN = "huggingface_token"
         private const val KEY_GROQ_API = "groq_api_key"
+        private const val KEY_OPENROUTER_API = "openrouter_api_key"
     }
 }

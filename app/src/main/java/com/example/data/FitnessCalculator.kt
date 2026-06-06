@@ -223,6 +223,39 @@ object FitnessCalculator {
         return (maintenanceCalories + adjustment).coerceAtLeast(1200)
     }
 
+    data class NutritionPlan(
+        val maintenanceCalories: Int,
+        val dailyCalories: Int,
+        val calorieAdjustmentDaily: Int,
+        val calorieAdjustmentWeekly: Int,
+        val macros: MacroSplit
+    )
+
+    /** Recompute daily calories from TDEE + weekly weight-change rate and derive macros. */
+    fun nutritionPlanFromProfile(profile: UserProfile): NutritionPlan {
+        val maintenance = tdee(
+            profile.gender, profile.currentWeight, profile.height, profile.age, profile.activityLevel
+        )
+        val weekly = profile.targetWeightChangePerWeek
+        val dailyCal = if (weekly > 0f && profile.goal != "Maintain Weight") {
+            dailyCaloriesFromWeeklyChange(maintenance, profile.goal, weekly)
+        } else {
+            profile.dailyCalories.takeIf { it >= 1200 } ?: dailyCalories(
+                profile.gender, profile.currentWeight, profile.height, profile.age,
+                profile.activityLevel, profile.goal
+            )
+        }
+        val adjustment = dailyCal - maintenance
+        val macros = calculateMacros(profile.currentWeight, dailyCal, profile.goal)
+        return NutritionPlan(
+            maintenanceCalories = maintenance,
+            dailyCalories = dailyCal,
+            calorieAdjustmentDaily = adjustment,
+            calorieAdjustmentWeekly = adjustment * 7,
+            macros = macros
+        )
+    }
+
     /** Daily calorie adjustment: negative = deficit, positive = surplus. */
     fun calorieAdjustmentDaily(maintenanceCalories: Int, targetCalories: Int): Int {
         return targetCalories - maintenanceCalories
