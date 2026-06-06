@@ -21,7 +21,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.AiProviderConfig
 import com.example.data.ModelSearchUtils
-import com.example.ui.theme.*
 
 @Composable
 fun ModelPickerDialog(
@@ -64,8 +63,9 @@ fun ModelPickerDialog(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .fillMaxHeight(if (useSearchList) 0.78f else 0.55f),
-            shape = RoundedCornerShape(20.dp),
-            color = SurfaceContainer
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 3.dp
         ) {
             Column(Modifier.fillMaxSize().padding(20.dp)) {
                 Row(
@@ -75,8 +75,8 @@ fun ModelPickerDialog(
                 ) {
                     Text(
                         title,
-                        style = Typography.titleMedium,
-                        color = Primary,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)
                     )
@@ -89,16 +89,11 @@ fun ModelPickerDialog(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search models…", color = OnSurfaceVariant) },
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = Primary) },
+                        placeholder = { Text("Search models…") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = OutlineVariant.copy(0.4f),
-                            focusedTextColor = OnSurface,
-                            unfocusedTextColor = OnSurface
-                        )
+                        shape = MaterialTheme.shapes.medium,
+                        colors = m3OutlinedTextFieldColors()
                     )
                 }
 
@@ -112,8 +107,8 @@ fun ModelPickerDialog(
                         ) {
                             Text(
                                 if (freeOnly) "No free models match your filter." else "No models match your search.",
-                                style = Typography.bodyMedium,
-                                color = OnSurfaceVariant
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -143,14 +138,21 @@ fun ModelPickerDialog(
                             }
                             val wheelIndex = filteredModels.indexOfFirst { it.id == draftModelId }
                                 .coerceAtLeast(0)
-                            WheelPicker(
-                                items = wheelLabels,
-                                selectedIndex = wheelIndex.coerceIn(0, wheelLabels.lastIndex),
-                                onSelected = { index ->
-                                    draftModelId = filteredModels[index.coerceIn(0, filteredModels.lastIndex)].id
-                                },
-                                label = null
-                            )
+                            Surface(
+                                shape = MaterialTheme.shapes.large,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                WheelPicker(
+                                    items = wheelLabels,
+                                    selectedIndex = wheelIndex.coerceIn(0, wheelLabels.lastIndex),
+                                    onSelected = { index ->
+                                        draftModelId = filteredModels[index.coerceIn(0, filteredModels.lastIndex)].id
+                                    },
+                                    label = null,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -162,7 +164,7 @@ fun ModelPickerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel", color = OnSurfaceVariant)
+                        Text("Cancel")
                     }
                     Spacer(Modifier.width(8.dp))
                     Button(
@@ -171,7 +173,7 @@ fun ModelPickerDialog(
                             onDismiss()
                         },
                         enabled = filteredModels.isNotEmpty(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = MaterialTheme.shapes.large
                     ) {
                         Text("Select")
                     }
@@ -183,30 +185,16 @@ fun ModelPickerDialog(
 
 @Composable
 private fun FreeFilterChip(enabled: Boolean, onToggle: () -> Unit) {
-    val shape = RoundedCornerShape(20.dp)
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .then(
-                if (enabled) {
-                    Modifier.background(Primary, shape)
-                } else {
-                    Modifier
-                        .border(1.dp, Primary, shape)
-                        .background(androidx.compose.ui.graphics.Color.Transparent, shape)
-                }
-            )
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "Free",
-            style = Typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (enabled) OnPrimary else Primary
+    val cs = MaterialTheme.colorScheme
+    FilterChip(
+        selected = enabled,
+        onClick = onToggle,
+        label = { Text("Free", fontWeight = FontWeight.SemiBold) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = cs.primaryContainer,
+            selectedLabelColor = cs.onPrimaryContainer
         )
-    }
+    )
 }
 
 @Composable
@@ -215,33 +203,27 @@ private fun ModelPickerListItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    Row(
+    val cs = MaterialTheme.colorScheme
+    ListItem(
+        headlineContent = {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (selected) cs.primary else cs.onSurface
+            )
+        },
+        trailingContent = {
+            if (selected) {
+                Icon(Icons.Default.Check, null, tint = cs.primary, modifier = Modifier.size(20.dp))
+            }
+        },
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
+            .clip(MaterialTheme.shapes.medium)
             .background(
-                if (selected) Primary.copy(alpha = 0.12f) else SurfaceContainerHighest.copy(0.35f),
-                shape
+                if (selected) cs.primaryContainer.copy(alpha = 0.35f)
+                else cs.surfaceContainerHighest.copy(alpha = 0.35f)
             )
-            .border(
-                1.dp,
-                if (selected) Primary.copy(0.5f) else OutlineVariant.copy(0.25f),
-                shape
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = Typography.bodyMedium,
-            color = if (selected) Primary else OnSurface,
-            modifier = Modifier.weight(1f)
-        )
-        if (selected) {
-            Icon(Icons.Default.Check, null, tint = Primary, modifier = Modifier.size(20.dp))
-        }
-    }
+            .clickable(onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+    )
 }

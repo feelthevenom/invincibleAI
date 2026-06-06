@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,17 +25,17 @@ fun AiCoachInsightCard(insight: CoachInsight, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(SurfaceContainer, RoundedCornerShape(16.dp))
-            .border(1.dp, Primary.copy(0.35f), RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(0.35f), RoundedCornerShape(16.dp))
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 insight.headline.uppercase(),
-                style = Typography.labelMedium,
-                color = Primary,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -47,15 +48,15 @@ fun AiCoachInsightCard(insight: CoachInsight, modifier: Modifier = Modifier) {
                     val start = body.indexOf(highlight, ignoreCase = true)
                     if (start >= 0) {
                         append(body.substring(0, start))
-                        withStyle(SpanStyle(color = Secondary, fontWeight = FontWeight.Bold)) {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)) {
                             append(body.substring(start, start + highlight.length))
                         }
                         append(body.substring(start + highlight.length))
                     } else append(body)
                 } else append(body)
             },
-            style = Typography.bodyMedium,
-            color = OnSurface
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

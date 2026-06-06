@@ -8,14 +8,14 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk { version = release(37) }
 
   defaultConfig {
     applicationId = "com.aistudio.gymai.qxzpvw"
     minSdk = 24
-    targetSdk = 36
-    versionCode = 2
-    versionName = "1.1.0"
+    targetSdk = 37
+    versionCode = 3
+    versionName = "beta v0.3"
 
     buildConfigField(
       "String",

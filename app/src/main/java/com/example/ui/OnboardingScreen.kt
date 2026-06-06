@@ -268,7 +268,7 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
 
     val animatedProgress by animateFloatAsState(targetValue = progress, animationSpec = tween(700), label = "prog")
 
-    Box(modifier = Modifier.fillMaxSize().background(Background)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AsyncImage(
             model = "https://lh3.googleusercontent.com/aida-public/AB6AXuBp6GjmmBl_imRCmTf5ECwQt6wFdFOHYNCCwSVpTo7osLw_5V8IGDPGYz3cRm8Y-sfBkvUy6YMM1N3-BofW2j3Z9AUNRn9jHRR0SCb-or8AbA4xx_LF0gWmajiqczmeXgYsORQqZ1Olt9B0X0MOAifCZRVd7NcMvainC-R7HXsBzZAih7Wy2qOlqe6VDhYRQfzvpYCKIC9grKw52m86I9XnJ_oYVByl3Syv-_zBNCDEN6NRZSHXXCKKc6ynhIVjHSevCveVyEr7gC32",
             contentDescription = null,
@@ -279,8 +279,8 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
 
         Column(modifier = Modifier.fillMaxSize()) {
             Column {
-                Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(SurfaceContainerHighest)) {
-                    Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(Primary))
+                Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(MaterialTheme.colorScheme.primary))
                 }
                 Row(
                     modifier = Modifier
@@ -293,9 +293,9 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = { if (step > 1) step-- }, enabled = step > 1) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (step > 1) OnSurface else OnSurface.copy(0.3f))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (step > 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(0.3f))
                     }
-                    Text("STEP $step OF $totalSteps", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("STEP $step OF $totalSteps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.width(48.dp))
                 }
             }
@@ -314,18 +314,18 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                             inchIndex, { inchIndex = it }
                         )
                         Spacer(modifier = Modifier.height(24.dp))
-                        HorizontalDivider(color = OutlineVariant.copy(0.3f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f))
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             "Already have a backup?",
-                            style = Typography.titleMedium,
-                            color = OnSurface
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "Restore gymai_backup.zip to skip setup and open the app with your saved data.",
-                            style = Typography.bodySmall,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedButton(
@@ -337,13 +337,12 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                             enabled = !restoreLoading,
                             modifier = Modifier.fillMaxWidth().height(52.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Secondary)
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
                         ) {
                             if (restoreLoading) {
-                                CircularProgressIndicator(
+                                GymLoadingIndicatorSmall(
                                     modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Secondary
+                                    color = MaterialTheme.colorScheme.secondary
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Text("Restoring…")
@@ -355,7 +354,7 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                         }
                         restoreMessage?.let { msg ->
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(msg, color = Error, style = Typography.bodySmall)
+                            Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     2 -> Step2Content(activityLevel, { activityLevel = it }, goal, { goal = it; recalculateTargetWeight() })
@@ -366,15 +365,15 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                 }
             }
 
-            Box(Modifier.fillMaxWidth().background(Background.copy(0.95f)).border(1.dp, OutlineVariant.copy(0.2f)).padding(20.dp)) {
+            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background.copy(0.95f)).border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.2f)).padding(20.dp)) {
                 Button(
                     onClick = { if (step < totalSteps) step++ else finishOnboarding() },
                     enabled = canProceed(),
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
-                    Text(if (step < totalSteps) "Continue" else "Complete Setup", style = Typography.headlineMedium.copy(fontSize = 18.sp))
+                    Text(if (step < totalSteps) "Continue" else "Complete Setup", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp))
                 }
             }
         }
@@ -385,14 +384,14 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
 private fun Step1Pickers(
     ageIndex: Int, onAgeIndex: (Int) -> Unit,
     gender: String, onGender: (String) -> Unit,
-    useMetric: Boolean, onMetricToggle: (Boolean) -> Unit,
+    useMetricHeight: Boolean, onMetricToggle: (Boolean) -> Unit,
     heightCmIndex: Int, onHeightCmIndex: (Int) -> Unit,
     feetIndex: Int, onFeetIndex: (Int) -> Unit,
     inchIndex: Int, onInchIndex: (Int) -> Unit
 ) {
-    Text("Tell us about yourself", style = Typography.headlineLarge, color = Primary)
+    Text("Tell us about yourself", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Tap age and height to adjust your profile.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Tap age and height to adjust your profile.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         WheelPickerField(
@@ -405,9 +404,9 @@ private fun Step1Pickers(
         OnboardingDropdown("Gender", gender, FitnessCalculator.genders, onGender, Modifier.weight(1f))
     }
     Spacer(modifier = Modifier.height(20.dp))
-    HeightUnitToggle(useMetric, onMetricToggle)
+    HeightUnitToggle(useMetricHeight, onMetricToggle)
     Spacer(modifier = Modifier.height(12.dp))
-    if (useMetric) {
+    if (useMetricHeight) {
         WheelPickerField(
             label = "Height",
             items = cmHeightItems(),
@@ -441,9 +440,9 @@ private fun Step3Pickers(
     targetIndex: Int, onTargetIndex: (Int) -> Unit,
     heightCm: Int
 ) {
-    Text("Your weight goals", style = Typography.headlineLarge, color = Primary)
+    Text("Your weight goals", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Reasonable range for ${heightCm}cm: ${ProfileValidation.minReasonableWeight(heightCm).toInt()}–${ProfileValidation.maxReasonableWeight(heightCm).toInt()} kg", style = Typography.bodySmall, color = OnSurfaceVariant)
+    Text("Reasonable range for ${heightCm}cm: ${ProfileValidation.minReasonableWeight(heightCm).toInt()}–${ProfileValidation.maxReasonableWeight(heightCm).toInt()} kg", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
     WheelPicker(items = weightItems, selectedIndex = currentIndex.coerceIn(0, weightItems.lastIndex), onSelected = onCurrentIndex, label = "Current Weight")
     Spacer(modifier = Modifier.height(16.dp))
@@ -460,22 +459,22 @@ private fun Step5Pickers(
     targetChangePerWeek: Float,
     dailyCalories: String
 ) {
-    Text("Timeline & calories", style = Typography.headlineLarge, color = Primary)
+    Text("Timeline & calories", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Adjust your weekly target within safe limits. Workout schedule is set in the next step.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Adjust your weekly target within safe limits. Workout schedule is set in the next step.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
     val weeklyItems = weeklyChangeItems(ProfileValidation.minWeeklyChangeKg(goal), ProfileValidation.maxWeeklyChangeKg(goal, currentWeight))
     if (goal != "Maintain Weight" && weeklyItems.isNotEmpty()) {
-        Text("TARGET WEIGHT CHANGE / WEEK", style = Typography.labelMedium, color = OnSurfaceVariant)
+        Text("TARGET WEIGHT CHANGE / WEEK", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
         WheelPicker(items = weeklyItems, selectedIndex = weeklyIndex.coerceIn(0, weeklyItems.lastIndex), onSelected = onWeeklyIndex)
         weeklyWarning?.let {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(it, color = Error, style = Typography.bodySmall)
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         val estimatedDeficit = ProfileValidation.estimatedDailyDeficitForWeeklyChange(targetChangePerWeek)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Estimated daily deficit for this rate: ~$estimatedDeficit kcal (7700 kcal ≈ 1 kg)", style = Typography.bodySmall, color = OnSurfaceVariant)
+        Text("Estimated daily deficit for this rate: ~$estimatedDeficit kcal (7700 kcal ≈ 1 kg)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     Spacer(modifier = Modifier.height(16.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -493,11 +492,11 @@ private fun Step5Pickers(
 
 @Composable
 private fun Step6Cuisine(selected: Set<String>, onSelected: (Set<String>) -> Unit) {
-    Text("Food preferences", style = Typography.headlineLarge, color = Primary)
+    Text("Food preferences", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Select cuisines you eat often. We'll use this to suggest foods when logging meals.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Select cuisines you eat often. We'll use this to suggest foods when logging meals.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(24.dp))
-    Text("SELECT CUISINE TYPES", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("SELECT CUISINE TYPES", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(12.dp))
     CuisineTypes.ALL.forEach { cuisine ->
         GoalCard(title = cuisine, isSelected = cuisine in selected) {
@@ -518,13 +517,13 @@ private fun Step2Content(
     activityLevel: String, onActivityChange: (String) -> Unit,
     goal: String, onGoalChange: (String) -> Unit
 ) {
-    Text("Your activity & goals", style = Typography.headlineLarge, color = Primary)
+    Text("Your activity & goals", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("This helps us calculate your calorie and training targets.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("This helps us calculate your calorie and training targets.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(32.dp))
     OnboardingDropdown("Activity Level", activityLevel, FitnessCalculator.activityLevels, onActivityChange)
     Spacer(modifier = Modifier.height(32.dp))
-    Text("SELECT PRIMARY GOAL", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("SELECT PRIMARY GOAL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(12.dp))
     FitnessCalculator.goals.forEach { g ->
         GoalCard(title = g, isSelected = goal == g, icon = GoalIcons.iconFor(g)) { onGoalChange(g) }
@@ -540,13 +539,13 @@ private fun Step4Content(
     fat: String, onFatChange: (String) -> Unit,
     fiber: String, onFiberChange: (String) -> Unit
 ) {
-    Text("Daily nutrition", style = Typography.headlineLarge, color = Primary)
+    Text("Daily nutrition", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
-    Text("Calories and macros are calculated from your profile. Edit any value and others will auto-balance.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text("Calories and macros are calculated from your profile. Edit any value and others will auto-balance.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(32.dp))
     OnboardingTextField("Total Calories", dailyCalories, onCaloriesChange, suffix = "kcal")
     Spacer(modifier = Modifier.height(24.dp))
-    Text("MACROS", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("MACROS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(12.dp))
     MacroEditRow("Protein", protein, onValueChange = { v -> if (v.all { it.isDigit() }) onProteinChange(v) })
     Spacer(modifier = Modifier.height(8.dp))

@@ -75,14 +75,18 @@ object WaterNotificationHelper {
 
     fun scheduleReminders(context: Context, enabled: Boolean) {
         if (!enabled) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            cancelAll(alarmManager, context)
+            cancelReminders(context)
             return
         }
         runBlocking {
             val profile = AppDatabase.getDatabase(context).gymDao().getUserProfile().first()
             if (profile != null) scheduleReminders(context, profile)
         }
+    }
+
+    fun cancelReminders(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        cancelAll(alarmManager, context)
     }
 
     private fun scheduleInexactFallback(context: Context, alarmManager: AlarmManager) {
@@ -229,10 +233,23 @@ object WaterNotificationHelper {
 
 class WaterReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        val progress = WaterNotificationHelper.computeProgressPercent(context)
-        if (progress < 95) {
-            WaterNotificationHelper.showHydrationNotification(context, progress)
+        if (!NotificationUtils.canPostNotifications(context)) {
+            reschedule(context)
+            return
         }
+        runBlocking {
+            val profile = AppDatabase.getDatabase(context).gymDao().getUserProfile().first()
+            if (profile != null && profile.waterSnoozeUntilMs > System.currentTimeMillis()) {
+                reschedule(context)
+                return@runBlocking
+            }
+        }
+        val progress = WaterNotificationHelper.computeProgressPercent(context)
+        WaterNotificationHelper.showHydrationNotification(context, progress)
+        reschedule(context)
+    }
+
+    private fun reschedule(context: Context) {
         runBlocking {
             val profile = AppDatabase.getDatabase(context).gymDao().getUserProfile().first()
             if (profile != null && profile.waterReminderEnabled) {

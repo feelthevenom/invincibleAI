@@ -11,7 +11,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.WorkoutFinishSummary
-import com.example.ui.theme.*
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -27,18 +26,18 @@ fun WorkoutFinishSummaryDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
         ) {
             Column(
                 Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("Workout Complete!", style = Typography.headlineMedium, color = Primary)
+                Text("Workout Complete!", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                 Text(
                     summary.motivationalMessage,
-                    style = Typography.bodyMedium,
-                    color = OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
 
@@ -62,12 +61,12 @@ fun WorkoutFinishSummaryDialog(
                     onClick = onDiscard,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Error)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text("Discard Workout")
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("Back to Workout", color = OnSurfaceVariant)
+                    Text("Back to Workout", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -77,7 +76,7 @@ fun WorkoutFinishSummaryDialog(
 @Composable
 private fun SummaryStat(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = Typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = OnSurface)
-        Text(label, style = Typography.labelMedium, color = OnSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurface)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

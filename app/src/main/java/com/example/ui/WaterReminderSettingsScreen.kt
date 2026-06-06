@@ -89,6 +89,17 @@ fun WaterReminderSettingsScreen(
 
     fun saveSettings() {
         val alarmEnabled = enabled && WaterNotificationHelper.canScheduleExactAlarms(context)
+        val updatedProfile = profile.copy(
+            waterReminderEnabled = enabled,
+            waterAlarmRemindersEnabled = alarmEnabled,
+            waterReminderMode = mode,
+            waterReminderIntervalMinutes = intervalMinutes.coerceAtLeast(15),
+            waterReminderTimesPerDay = timesPerDay.coerceIn(1, 12),
+            waterReminderDailyTimeMinute = dailyTimeMinute,
+            waterReminderWeeklyDay = weeklyDay,
+            waterReminderWindowStartMinute = windowStart,
+            waterReminderWindowEndMinute = windowEnd
+        )
         viewModel.saveWaterReminderSettings(
             enabled = enabled,
             alarmEnabled = alarmEnabled,
@@ -100,7 +111,11 @@ fun WaterReminderSettingsScreen(
             windowStartMinute = windowStart,
             windowEndMinute = windowEnd
         )
-        WaterNotificationHelper.scheduleReminders(context, enabled)
+        if (enabled) {
+            WaterNotificationHelper.scheduleReminders(context, updatedProfile)
+        } else {
+            WaterNotificationHelper.cancelReminders(context)
+        }
         onBack()
     }
 
@@ -358,24 +373,10 @@ private fun TimePickerDialog(
     onDismiss: () -> Unit,
     onSave: (Int) -> Unit
 ) {
-    val cal = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, minuteOfDay / 60)
-        set(Calendar.MINUTE, minuteOfDay % 60)
-    }
-    val state = rememberTimePickerState(
-        initialHour = cal.get(Calendar.HOUR_OF_DAY),
-        initialMinute = cal.get(Calendar.MINUTE),
-        is24Hour = false
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                onSave(state.hour * 60 + state.minute)
-            }) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
-        text = { TimePicker(state = state) }
+    GymTimePickerDialog(
+        minuteOfDay = minuteOfDay,
+        onDismiss = onDismiss,
+        onConfirm = onSave
     )
 }
 

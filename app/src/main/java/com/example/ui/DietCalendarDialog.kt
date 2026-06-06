@@ -44,7 +44,7 @@ fun DietCalendarDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
         ) {
             Column(Modifier.padding(20.dp)) {
                 // Header: Navigate Month or Toggle Year Selection
@@ -63,7 +63,7 @@ fun DietCalendarDialog(
                             } else viewMonth--
                         }
                     }) {
-                        Icon(Icons.Default.ChevronLeft, null, tint = Primary)
+                        Icon(Icons.Default.ChevronLeft, null, tint = MaterialTheme.colorScheme.primary)
                     }
                     
                     Text(
@@ -78,8 +78,8 @@ fun DietCalendarDialog(
                                 }.timeInMillis
                             )
                         },
-                        style = Typography.titleMedium.copy(fontSize = 18.sp),
-                        color = Primary,
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { isYearSelectionMode = !isYearSelectionMode }
@@ -96,7 +96,7 @@ fun DietCalendarDialog(
                             } else viewMonth++
                         }
                     }) {
-                        Icon(Icons.Default.ChevronRight, null, tint = Primary)
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -154,8 +154,8 @@ private fun MonthViewGrid(
                     name,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    style = Typography.labelSmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -182,16 +182,16 @@ private fun MonthViewGrid(
                         val hasData = summary?.hasData == true
                         val goalMet = summary?.goalMet == true
                         val bg = when {
-                            isFuture -> SurfaceContainerHighest.copy(0.15f)
-                            isSelected -> Primary
-                            goalMet -> Secondary.copy(0.85f)
-                            hasData -> Secondary.copy(0.18f)
-                            else -> SurfaceContainerHighest.copy(0.35f)
+                            isFuture -> MaterialTheme.colorScheme.surfaceVariant.copy(0.15f)
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            goalMet -> MaterialTheme.colorScheme.secondary.copy(0.85f)
+                            hasData -> MaterialTheme.colorScheme.secondary.copy(0.18f)
+                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(0.35f)
                         }
                         val textColor = when {
-                            isFuture -> OnSurfaceVariant.copy(0.35f)
-                            isSelected || goalMet -> OnPrimary
-                            else -> OnSurface
+                            isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(0.35f)
+                            isSelected || goalMet -> MaterialTheme.colorScheme.onPrimary
+                            else -> MaterialTheme.colorScheme.onSurface
                         }
                         Box(
                             modifier = Modifier
@@ -199,7 +199,7 @@ private fun MonthViewGrid(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(bg)
                                 .then(
-                                    if (isSelected) Modifier.border(1.dp, Primary, RoundedCornerShape(8.dp))
+                                    if (isSelected) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                                     else Modifier
                                 )
                                 .clickable {
@@ -210,7 +210,7 @@ private fun MonthViewGrid(
                         ) {
                             Text(
                                 "${cell.dayNumber}",
-                                style = Typography.bodySmall.copy(
+                                style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (isSelected || goalMet) FontWeight.Bold else FontWeight.Normal
                                 ),
                                 color = textColor
@@ -237,8 +237,8 @@ private fun YearSelectionGrid(
     Column(Modifier.height(280.dp)) {
         Text(
             "Select Year",
-            style = Typography.labelMedium,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         LazyVerticalGrid(
@@ -254,10 +254,10 @@ private fun YearSelectionGrid(
                         .fillMaxWidth()
                         .height(60.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Primary.copy(0.12f) else SurfaceContainerHighest.copy(0.3f))
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(0.3f))
                         .border(
                             width = if (isSelected) 1.dp else 0.dp,
-                            color = if (isSelected) Primary else Color.Transparent,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clickable { onYearSelected(year) },
@@ -265,8 +265,8 @@ private fun YearSelectionGrid(
                 ) {
                     Text(
                         "$year",
-                        style = Typography.titleMedium,
-                        color = if (isSelected) Primary else OnSurface
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

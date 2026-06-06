@@ -80,8 +80,13 @@ class GymApplication : Application(), ImageLoaderFactory {
     val appUpdateManager by lazy { com.example.data.AppUpdateManager(this) }
 
     fun refreshRepositoryAfterRestore() {
+        invalidateAfterRestore()
+    }
+
+    fun invalidateAfterRestore() {
         synchronized(this) {
             repositoryRef = null
         }
+        AppDatabase.closeDatabase()
     }
 }

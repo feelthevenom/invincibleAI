@@ -1,9 +1,11 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 package com.example.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,76 +17,101 @@ import androidx.compose.ui.unit.dp
 import com.example.AppUpdateUiState
 import com.example.BuildConfig
 import com.example.GymViewModel
-import com.example.ui.theme.*
 
 @Composable
 fun AppUpdateSection(viewModel: GymViewModel) {
     val updateState by viewModel.appUpdateState.collectAsState()
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
 
-    Text("APP UPDATES", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("APP UPDATES", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
-    Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
-        shape = RoundedCornerShape(12.dp)
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = cs.surfaceContainerHigh),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = cs.primaryContainer,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.SystemUpdate, null, tint = cs.onPrimaryContainer)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         "Version ${BuildConfig.VERSION_NAME}",
-                        style = Typography.titleMedium,
-                        color = OnSurface,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = cs.onSurface,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
                         "Build ${BuildConfig.VERSION_CODE}",
-                        style = Typography.bodySmall,
-                        color = OnSurfaceVariant
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant
                     )
                 }
-                Icon(Icons.Default.SystemUpdate, null, tint = Primary)
             }
 
+            HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.35f))
+
             when (val state = updateState) {
-                AppUpdateUiState.Idle -> Unit
+                AppUpdateUiState.Idle -> {
+                    Text(
+                        "Check GitHub for the latest sideload release.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurfaceVariant
+                    )
+                }
                 AppUpdateUiState.Checking -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text("Checking for updates…", style = Typography.bodySmall, color = OnSurfaceVariant)
+                    GymLoadingIndicator(message = "Checking for updates…")
                 }
                 AppUpdateUiState.UpToDate -> {
-                    Text("You're on the latest version.", style = Typography.bodySmall, color = Secondary)
+                    Text(
+                        "You're on the latest version.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.secondary
+                    )
                 }
                 is AppUpdateUiState.Available -> {
                     Text(
                         "Update ${state.info.versionName} available",
-                        style = Typography.bodyMedium,
-                        color = Primary,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = cs.primary,
                         fontWeight = FontWeight.SemiBold
                     )
                     if (state.info.releaseNotes.isNotBlank()) {
-                        Text(state.info.releaseNotes, style = Typography.bodySmall, color = OnSurfaceVariant)
+                        Text(state.info.releaseNotes, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                     }
                     if (state.downloading) {
                         LinearProgressIndicator(
                             progress = { state.progress },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            color = cs.primary,
+                            trackColor = cs.surfaceContainerHighest
                         )
                         Text(
                             "Downloading… ${(state.progress * 100).toInt()}%",
-                            style = Typography.bodySmall,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant
                         )
                     } else {
                         Button(
                             onClick = { viewModel.downloadAppUpdate() },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = MaterialTheme.shapes.large
                         ) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
                             Text("Download update")
                         }
                     }
@@ -92,11 +119,11 @@ fun AppUpdateSection(viewModel: GymViewModel) {
                 is AppUpdateUiState.ReadyToInstall -> {
                     Text(
                         "Update ${state.info.versionName} ready to install",
-                        style = Typography.bodyMedium,
-                        color = Secondary,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = cs.secondary,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             if (viewModel.appUpdateManager.canInstallPackages()) {
                                 context.startActivity(viewModel.createAppUpdateInstallIntent())
@@ -105,13 +132,15 @@ fun AppUpdateSection(viewModel: GymViewModel) {
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = MaterialTheme.shapes.large
                     ) {
+                        Icon(Icons.Default.InstallMobile, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text("Install update")
                     }
                 }
                 is AppUpdateUiState.Error -> {
-                    Text(state.message, style = Typography.bodySmall, color = Error)
+                    Text(state.message, style = MaterialTheme.typography.bodySmall, color = cs.error)
                 }
             }
 
@@ -120,12 +149,9 @@ fun AppUpdateSection(viewModel: GymViewModel) {
                 onClick = { viewModel.checkForAppUpdate(showUpToDateMessage = true) },
                 enabled = updateState !is AppUpdateUiState.Checking && !isDownloading,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.large
             ) {
-                Text(
-                    if (updateState is AppUpdateUiState.Checking) "Checking…" else "Check for updates",
-                    color = Primary
-                )
+                Text(if (updateState is AppUpdateUiState.Checking) "Checking…" else "Check for updates")
             }
         }
     }
@@ -164,17 +190,20 @@ private fun AppUpdateAvailableDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.SystemUpdate, null) },
         title = { Text("Update available") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Version ${state.info.versionName} is available.")
                 if (state.info.releaseNotes.isNotBlank()) {
-                    Text(state.info.releaseNotes, style = Typography.bodySmall, color = OnSurfaceVariant)
+                    Text(state.info.releaseNotes, style = MaterialTheme.typography.bodySmall)
                 }
                 if (state.downloading) {
                     LinearProgressIndicator(
                         progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 }
             }
@@ -201,6 +230,7 @@ private fun AppUpdateReadyDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.InstallMobile, null) },
         title = { Text("Update ready to install") },
         text = {
             Text("Version ${state.info.versionName} has been downloaded.")

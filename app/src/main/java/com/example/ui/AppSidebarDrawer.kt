@@ -9,8 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,94 +21,85 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.*
 
-enum class MainOverlay { None, PersonalDetails, Settings, WaterTracking, WaterReminderSettings, NotificationHistory, WorkoutReminder }
+enum class MainOverlay { None, PersonalDetails, AiSettings, Settings, WaterTracking, WaterReminderSettings, NotificationHistory, WorkoutReminder }
 
 @Composable
 fun AppSidebarDrawer(
     isOpen: Boolean,
     onDismiss: () -> Unit,
     onPersonalDetails: () -> Unit,
+    onAiSettings: () -> Unit,
     onSettings: () -> Unit,
-    onBackupRestore: () -> Unit,
-    modifier: Modifier = Modifier
+    content: @Composable () -> Unit
 ) {
-    val scrimAlpha by animateFloatAsState(
-        targetValue = if (isOpen) 0.5f else 0f,
-        animationSpec = tween(300),
-        label = "scrim"
-    )
-    val offsetFraction by animateFloatAsState(
-        targetValue = if (isOpen) 0f else -1f,
-        animationSpec = tween(350),
-        label = "drawer"
-    )
-
-    if (isOpen || scrimAlpha > 0f) {
-        Box(modifier = modifier.fillMaxSize()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(scrimAlpha)
-                    .background(Color.Black)
-                    .clickable(onClick = onDismiss)
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.78f)
-                    .offset(x = (offsetFraction * 300).dp)
-                    .background(Surface, RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Menu", style = Typography.headlineMedium, color = Primary)
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.Close, "Close", tint = OnSurface)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(32.dp))
-                    SidebarMenuItem(
-                        icon = { Icon(Icons.Default.Person, null, tint = Primary) },
-                        title = "Personal Details",
-                        subtitle = "View and edit your profile",
-                        onClick = {
-                            onDismiss()
-                            onPersonalDetails()
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SidebarMenuItem(
-                        icon = { Icon(Icons.Default.Settings, null, tint = Secondary) },
-                        title = "Settings",
-                        subtitle = "App preferences",
-                        onClick = {
-                            onDismiss()
-                            onSettings()
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SidebarMenuItem(
-                        icon = { Icon(Icons.Default.Backup, null, tint = Primary) },
-                        title = "Backup & Restore",
-                        subtitle = "Export or import gymai_backup.zip",
-                        onClick = {
-                            onDismiss()
-                            onBackupRestore()
-                        }
-                    )
-                }
-            }
+    val drawerState = rememberDrawerState(initialValue = if (isOpen) DrawerValue.Open else DrawerValue.Closed)
+    
+    LaunchedEffect(isOpen) {
+        if (isOpen) drawerState.open() else drawerState.close()
+    }
+    
+    LaunchedEffect(drawerState.currentValue) {
+        if (drawerState.currentValue == DrawerValue.Closed && isOpen) {
+            onDismiss()
         }
     }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        drawerContent = {
+            ModalDrawerSheet(
+                modifier = Modifier.fillMaxHeight().fillMaxWidth(0.85f),
+                drawerContainerColor = MaterialTheme.colorScheme.surface,
+                drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+            ) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("GYM AI", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, null)
+                    }
+                }
+                
+                NavigationDrawerItem(
+                    label = { Text("Personal Details") },
+                    selected = false,
+                    onClick = { onDismiss(); onPersonalDetails() },
+                    icon = { Icon(Icons.Default.Person, null) },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                
+                NavigationDrawerItem(
+                    label = { Text("AI Settings") },
+                    selected = false,
+                    onClick = { onDismiss(); onAiSettings() },
+                    icon = { Icon(Icons.Default.AutoAwesome, null) },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                
+                NavigationDrawerItem(
+                    label = { Text("Settings") },
+                    selected = false,
+                    onClick = { onDismiss(); onSettings() },
+                    icon = { Icon(Icons.Default.Settings, null) },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+                
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "v2.4.0 • Pro Member",
+                    modifier = Modifier.padding(24.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        content = content
+    )
 }
 
 @Composable
@@ -118,26 +109,29 @@ private fun SidebarMenuItem(
     subtitle: String,
     onClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(SurfaceContainer, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        onClick = onClick
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(SurfaceContainerHigh, RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            icon()
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
-            Text(title, style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
-            Text(subtitle, style = Typography.bodySmall, color = OnSurfaceVariant)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(title, style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
+                Text(subtitle, style = Typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

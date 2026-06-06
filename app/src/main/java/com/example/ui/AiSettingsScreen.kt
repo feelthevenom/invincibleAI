@@ -115,16 +115,16 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI Settings", style = Typography.headlineMedium, color = Primary) },
+                title = { Text("AI Settings", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = Background
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -134,32 +134,42 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (aiStatus.isReady) Secondary.copy(0.12f) else Error.copy(0.08f)
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = if (aiStatus.isReady) MaterialTheme.colorScheme.secondaryContainer.copy(0.3f) 
+                                         else MaterialTheme.colorScheme.errorContainer.copy(0.3f)
                     ),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("AI STATUS", style = Typography.labelMedium, color = Primary)
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (aiStatus.isReady) Icons.Default.CheckCircle else Icons.Default.Error,
+                                null,
+                                tint = if (aiStatus.isReady) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("AI ENGINE STATUS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        }
                         Text(
                             aiStatus.label,
-                            style = Typography.titleMedium,
-                            color = if (aiStatus.isReady) Secondary else Error,
-                            fontWeight = FontWeight.SemiBold
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = if (aiStatus.isReady) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
                         )
-                        Text(aiStatus.detail, style = Typography.bodySmall, color = OnSurfaceVariant)
+                        Text(aiStatus.detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f))
                         Text(
                             "Device RAM: ${String.format("%.1f", ramGb)} GB",
-                            style = Typography.bodySmall,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
             item {
-                Text("MODEL CONFIGURATION MODE", style = Typography.labelMedium, color = OnSurfaceVariant)
+                Text("MODEL CONFIGURATION MODE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 ModelModeToggle(
                     split = profile.aiSplitModels,
@@ -173,14 +183,14 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     } else {
                         "Use one multimodal model for text, vision, and coaching."
                     },
-                    style = Typography.bodySmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             if (!profile.aiSplitModels) {
                 item {
-                    Text("PROVIDER", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("PROVIDER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     ProviderCard(
                         provider = profile.aiProvider,
@@ -197,8 +207,8 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                         val modelName = AiProviderConfig.modelDisplayName(profile.aiProvider, profile.aiModelId)
                         Text(
                             if (profile.aiProvider == "groq") "MULTIMODAL MODEL" else "MULTIMODAL MODEL",
-                            style = Typography.labelMedium,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(8.dp))
                         ModelSlotCard(
@@ -209,7 +219,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                                 "Text-only model — switch for photo analysis."
                             },
                             icon = Icons.Default.AutoAwesome,
-                            subtitleColor = if (AiProviderConfig.supportsVision(profile.aiProvider, profile.aiModelId)) Secondary else Error,
+                            subtitleColor = if (AiProviderConfig.supportsVision(profile.aiProvider, profile.aiModelId)) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
                             onChange = {
                                 if (profile.aiProvider == "openrouter") viewModel.refreshOpenRouterModels()
                                 pickerTarget = PickerTarget.UnifiedModel
@@ -222,7 +232,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                 }
             } else {
                 item {
-                    Text("TEXT MODEL", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("TEXT MODEL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     ProviderCard(
                         provider = profile.aiTextProvider,
@@ -240,7 +250,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                             title = AiProviderConfig.modelDisplayName(profile.aiTextProvider, profile.aiTextModelId),
                             subtitle = "Coaching, insights, and text-based food suggestions.",
                             icon = Icons.Default.Psychology,
-                            subtitleColor = OnSurfaceVariant,
+                            subtitleColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             onChange = {
                                 if (profile.aiTextProvider == "openrouter") viewModel.refreshOpenRouterModels()
                                 pickerTarget = PickerTarget.TextModel
@@ -250,7 +260,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                     if (profile.aiTextProvider == "gemini") {
                         Spacer(Modifier.height(12.dp))
-                        Text("TEXT MODEL API", style = Typography.labelMedium, color = OnSurfaceVariant)
+                        Text("TEXT MODEL API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
                         GeminiApiKeySection(
                             geminiKey = geminiKey,
@@ -275,12 +285,12 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                     if (profile.aiTextProvider == "groq") {
                         Spacer(Modifier.height(12.dp))
-                        Text("TEXT MODEL API", style = Typography.labelMedium, color = OnSurfaceVariant)
+                        Text("TEXT MODEL API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "Groq text models for coaching and insights.",
-                            style = Typography.bodySmall,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(8.dp))
                         GroqApiKeySection(
@@ -332,7 +342,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                 }
                 item {
-                    Text("VISION MODEL", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("VISION MODEL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     ProviderCard(
                         provider = profile.aiVisionProvider,
@@ -350,7 +360,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                             title = AiProviderConfig.modelDisplayName(profile.aiVisionProvider, profile.aiVisionModelId),
                             subtitle = "Food photo analysis only.",
                             icon = Icons.Default.Visibility,
-                            subtitleColor = Secondary,
+                            subtitleColor = MaterialTheme.colorScheme.secondary,
                             onChange = {
                                 if (profile.aiVisionProvider == "openrouter") viewModel.refreshOpenRouterModels()
                                 pickerTarget = PickerTarget.VisionModel
@@ -360,7 +370,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                     if (profile.aiVisionProvider == "gemini") {
                         Spacer(Modifier.height(12.dp))
-                        Text("VISION MODEL API", style = Typography.labelMedium, color = OnSurfaceVariant)
+                        Text("VISION MODEL API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
                         GeminiApiKeySection(
                             geminiKey = geminiKey,
@@ -385,12 +395,12 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                     if (profile.aiVisionProvider == "groq") {
                         Spacer(Modifier.height(12.dp))
-                        Text("VISION MODEL API", style = Typography.labelMedium, color = OnSurfaceVariant)
+                        Text("VISION MODEL API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "Groq vision uses Llama 4 Scout for food photo analysis.",
-                            style = Typography.bodySmall,
-                            color = OnSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(8.dp))
                         GroqApiKeySection(
@@ -453,7 +463,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
 
             if (!profile.aiSplitModels && profile.aiProvider == "gemini") {
                 item {
-                    Text("API MANAGEMENT", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("API MANAGEMENT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     GeminiApiKeySection(
                         geminiKey = geminiKey,
@@ -486,12 +496,12 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
 
             if (!profile.aiSplitModels && profile.aiProvider == "groq") {
                 item {
-                    Text("API MANAGEMENT", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("API MANAGEMENT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "Groq vision uses Llama 4 Scout; text and vision share one API key.",
-                        style = Typography.bodySmall,
-                        color = OnSurfaceVariant
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
                     GroqApiKeySection(
@@ -525,12 +535,12 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
 
             if (!profile.aiSplitModels && profile.aiProvider == "openrouter") {
                 item {
-                    Text("API MANAGEMENT", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("API MANAGEMENT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "OpenRouter loads available models from your account. Pick a vision-capable model for food photos.",
-                        style = Typography.bodySmall,
-                        color = OnSurfaceVariant
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
                     OpenRouterApiSection(
@@ -566,10 +576,10 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             }
 
             item {
-                Text("OFFLINE MODELS", style = Typography.labelMedium, color = OnSurfaceVariant)
+                Text("OFFLINE MODELS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 aiSettings.error?.let {
                     Spacer(Modifier.height(6.dp))
-                    Text(it, color = Error, style = Typography.bodySmall)
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -597,9 +607,6 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     ImportModelCard(onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) })
                 }
             }
-            item {
-                AppUpdateSection(viewModel = viewModel)
-            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
@@ -621,47 +628,36 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     }
                 )
             } else if (modelConfig.emptyMessage != null) {
-                AlertDialog(
-                    onDismissRequest = { pickerTarget = null },
-                    title = { Text(modelConfig.title, color = Primary) },
-                    text = { Text(modelConfig.emptyMessage, color = OnSurfaceVariant) },
-                    confirmButton = {
-                        TextButton(onClick = { pickerTarget = null }) { Text("OK") }
-                    }
+                WheelPickerDialog(
+                    title = modelConfig.title,
+                    items = emptyList(),
+                    selectedIndex = 0,
+                    onDismiss = { pickerTarget = null },
+                    onConfirm = {},
+                    emptyMessage = modelConfig.emptyMessage
                 )
             }
         } else {
             val (title, items, onPick, emptyMessage) = pickerConfig(target, profile, viewModel, installedModels, openRouterRevision)
             if (items.isNotEmpty()) {
-                AlertDialog(
-                    onDismissRequest = { pickerTarget = null },
-                    title = { Text(title, color = Primary) },
-                    text = {
-                        WheelPicker(
-                            items = items,
-                            selectedIndex = pickerDraftIndex.coerceIn(0, items.lastIndex),
-                            onSelected = { pickerDraftIndex = it },
-                            label = null
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            onPick(pickerDraftIndex.coerceIn(0, items.lastIndex))
-                            pickerTarget = null
-                        }) { Text("Select") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { pickerTarget = null }) { Text("Cancel") }
+                WheelPickerDialog(
+                    title = title,
+                    items = items,
+                    selectedIndex = pickerDraftIndex.coerceIn(0, items.lastIndex),
+                    onDismiss = { pickerTarget = null },
+                    onConfirm = { index ->
+                        onPick(index.coerceIn(0, items.lastIndex))
+                        pickerTarget = null
                     }
                 )
             } else if (emptyMessage != null) {
-                AlertDialog(
-                    onDismissRequest = { pickerTarget = null },
-                    title = { Text(title, color = Primary) },
-                    text = { Text(emptyMessage, color = OnSurfaceVariant) },
-                    confirmButton = {
-                        TextButton(onClick = { pickerTarget = null }) { Text("OK") }
-                    }
+                WheelPickerDialog(
+                    title = title,
+                    items = emptyList(),
+                    selectedIndex = 0,
+                    onDismiss = { pickerTarget = null },
+                    onConfirm = {},
+                    emptyMessage = emptyMessage
                 )
             }
         }
@@ -677,7 +673,7 @@ private fun ModelModeToggle(split: Boolean, onUnified: () -> Unit, onSplit: () -
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceContainer, RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
             .padding(4.dp)
     ) {
         listOf(false to "UNIFIED MODEL", true to "SPLIT MODELS").forEach { (isSplit, label) ->
@@ -686,15 +682,15 @@ private fun ModelModeToggle(split: Boolean, onUnified: () -> Unit, onSplit: () -
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) Primary else androidx.compose.ui.graphics.Color.Transparent)
+                    .background(if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable { if (isSplit) onSplit() else onUnified() }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     label,
-                    style = Typography.labelSmall,
-                    color = if (selected) OnPrimary else Primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     textAlign = TextAlign.Center
                 )
@@ -706,7 +702,7 @@ private fun ModelModeToggle(split: Boolean, onUnified: () -> Unit, onSplit: () -
 @Composable
 private fun ProviderCard(provider: String, icon: ImageVector, onChange: () -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(14.dp)
     ) {
         Row(
@@ -719,22 +715,22 @@ private fun ProviderCard(provider: String, icon: ImageVector, onChange: () -> Un
                 Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Primary.copy(0.15f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = Primary, modifier = Modifier.size(22.dp))
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(AiProviderConfig.displayNameFor(provider), style = Typography.titleMedium, color = OnSurface)
+                Text(AiProviderConfig.displayNameFor(provider), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
                     AiProviderConfig.providerSubtitle(provider),
-                    style = Typography.bodySmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             TextButton(onClick = onChange) {
-                Text("CHANGE", style = Typography.labelMedium, color = Primary)
+                Text("CHANGE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -749,7 +745,7 @@ private fun ModelSlotCard(
     onChange: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(14.dp)
     ) {
         Row(
@@ -758,14 +754,14 @@ private fun ModelSlotCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = Primary, modifier = Modifier.size(24.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, style = Typography.titleMedium, color = Primary, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = Typography.bodySmall, color = subtitleColor)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = subtitleColor)
             }
             TextButton(onClick = onChange) {
-                Text("CHANGE", style = Typography.labelMedium, color = Primary)
+                Text("CHANGE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -780,7 +776,7 @@ private fun OfflineActivePicker(
     forVision: Boolean = false
 ) {
     if (installedModels.isEmpty()) {
-        Text("No on-device model installed. Download or import below.", style = Typography.bodySmall, color = OnSurfaceVariant)
+        Text("No on-device model installed. Download or import below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val ids = installedModels.map { it.id }
@@ -801,9 +797,9 @@ private fun OfflineActivePicker(
 private fun ImportModelCard(onImport: () -> Unit) {
     Card(
         onClick = onImport,
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainer.copy(0.6f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(0.6f)),
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, OutlineVariant.copy(0.35f))
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.35f))
     ) {
         Column(
             Modifier
@@ -816,16 +812,16 @@ private fun ImportModelCard(onImport: () -> Unit) {
                 Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(SurfaceContainerHigh),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.FileDownload, null, tint = Primary, modifier = Modifier.size(26.dp))
+                Icon(Icons.Default.FileDownload, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
             }
-            Text("Download Local Model", style = Typography.titleSmall, color = OnSurface, fontWeight = FontWeight.SemiBold)
+            Text("Download Local Model", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
             Text(
                 "Import a .litertlm file for offline exercise and food analysis",
-                style = Typography.bodySmall,
-                color = OnSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
         }
@@ -909,12 +905,12 @@ private fun OpenRouterApiSection(
     onRefreshModels: () -> Unit,
     authenticate: (() -> Unit) -> Unit
 ) {
-    Text("OPENROUTER API", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("OPENROUTER API", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(4.dp))
     Text(
         "Models are loaded from your OpenRouter account. Only available models appear in the picker.",
-        style = Typography.bodySmall,
-        color = OnSurfaceVariant
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(Modifier.height(8.dp))
     ApiKeyCard(
@@ -938,11 +934,11 @@ private fun OpenRouterApiSection(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp), tint = Primary)
+        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
         Text(
             if (isLoadingModels) "Loading models…" else "Refresh models",
-            color = Primary
+            color = MaterialTheme.colorScheme.primary
         )
     }
     Text(
@@ -952,8 +948,8 @@ private fun OpenRouterApiSection(
             !openRouterKey.isNullOrBlank() -> "No models loaded yet. Tap Refresh models."
             else -> "Add your API key to load models."
         },
-        style = Typography.bodySmall,
-        color = OnSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 6.dp)
     )
 }
@@ -970,24 +966,24 @@ private fun CombinedApiTestSection(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Icon(Icons.Default.Bolt, null, tint = Primary, modifier = Modifier.size(18.dp))
+        Icon(Icons.Default.Bolt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(
             if (apiTestState is ApiConnectionTestState.Testing) "Testing…" else "Test API Connection",
-            color = Primary
+            color = MaterialTheme.colorScheme.primary
         )
     }
     when (apiTestState) {
         is ApiConnectionTestState.Success -> Text(
             apiTestState.message,
-            style = Typography.bodySmall,
-            color = Secondary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.padding(top = 6.dp)
         )
         is ApiConnectionTestState.Error -> Text(
             apiTestState.message,
-            style = Typography.bodySmall,
-            color = Error,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(top = 6.dp)
         )
         else -> Unit

@@ -6,9 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
@@ -17,13 +15,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.example.data.backup.BackupRestoreManager
 import com.example.data.backup.AppRelaunch
-import com.example.ui.theme.*
+import com.example.ui.GymLoadingIndicator
+import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -34,39 +33,37 @@ class BackupRestoreActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Surface(color = Background) {
-                    BackupRestoreScreen(
-                        onBack = { finish() },
-                        onExport = { uri, onResult ->
-                            lifecycleScope.launch {
-                                val app = application as GymApplication
-                                val userProfile = app.repository.userProfile.first()
-                                    ?: com.example.data.UserProfile()
-                                val result = BackupRestoreManager.exportBackup(
-                                    this@BackupRestoreActivity,
-                                    uri,
-                                    userProfile
-                                )
-                                onResult(result)
-                            }
-                        },
-                        onValidate = { uri, onResult ->
-                            lifecycleScope.launch {
-                                val result = BackupRestoreManager.validateBackup(this@BackupRestoreActivity, uri)
-                                onResult(result)
-                            }
-                        },
-                        onImport = { uri, onResult ->
-                            lifecycleScope.launch {
-                                val result = BackupRestoreManager.importBackup(this@BackupRestoreActivity, uri)
-                                onResult(result)
-                                if (result is BackupRestoreManager.BackupResult.Success) {
-                                    AppRelaunch.afterRestore(this@BackupRestoreActivity)
-                                }
+                BackupRestoreScreen(
+                    onBack = { finish() },
+                    onExport = { uri, onResult ->
+                        lifecycleScope.launch {
+                            val app = application as GymApplication
+                            val userProfile = app.repository.userProfile.first()
+                                ?: com.example.data.UserProfile()
+                            val result = BackupRestoreManager.exportBackup(
+                                this@BackupRestoreActivity,
+                                uri,
+                                userProfile
+                            )
+                            onResult(result)
+                        }
+                    },
+                    onValidate = { uri, onResult ->
+                        lifecycleScope.launch {
+                            val result = BackupRestoreManager.validateBackup(this@BackupRestoreActivity, uri)
+                            onResult(result)
+                        }
+                    },
+                    onImport = { uri, onResult ->
+                        lifecycleScope.launch {
+                            val result = BackupRestoreManager.importBackup(this@BackupRestoreActivity, uri)
+                            onResult(result)
+                            if (result is BackupRestoreManager.BackupResult.Success) {
+                                AppRelaunch.afterRestore(this@BackupRestoreActivity)
                             }
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
@@ -80,6 +77,7 @@ private fun BackupRestoreScreen(
     onValidate: (android.net.Uri, (BackupRestoreManager.BackupResult) -> Unit) -> Unit,
     onImport: (android.net.Uri, (BackupRestoreManager.BackupResult) -> Unit) -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isError by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
@@ -130,11 +128,11 @@ private fun BackupRestoreScreen(
     if (showRestoreConfirm && pendingRestoreUri != null) {
         AlertDialog(
             onDismissRequest = { showRestoreConfirm = false },
-            title = { Text("Restore backup?", color = OnSurface) },
+            title = { Text("Restore backup?") },
             text = {
                 Text(
                     "This will replace your current data with the backup. This cannot be undone.",
-                    color = OnSurfaceVariant
+                    color = cs.onSurfaceVariant
                 )
             },
             confirmButton = {
@@ -155,28 +153,39 @@ private fun BackupRestoreScreen(
                             }
                         }
                     }
-                }) { Text("Restore", color = Error) }
+                }) {
+                    Text("Restore", color = cs.error)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel", color = Primary) }
+                TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel") }
             },
-            containerColor = SurfaceContainer
+            containerColor = cs.surfaceContainerHigh
         )
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Backup & Restore", style = Typography.headlineMedium, color = Primary) },
+                title = {
+                    Text(
+                        "Backup & Restore",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = cs.onSurface
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = cs.surface,
+                    titleContentColor = cs.onSurface
+                )
             )
         },
-        containerColor = Background
+        containerColor = cs.background
     ) { padding ->
         Column(
             modifier = Modifier
@@ -187,21 +196,26 @@ private fun BackupRestoreScreen(
         ) {
             Text(
                 "All data stays on your device. Export a backup to Google Drive, SD card, or any file manager. No cloud servers required.",
-                style = Typography.bodyMedium,
-                color = OnSurfaceVariant
+                style = MaterialTheme.typography.bodyMedium,
+                color = cs.onSurfaceVariant
             )
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.4f))
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = cs.surfaceContainerHigh)
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Backup contains:", style = Typography.labelMedium, color = Primary)
-                    Text("• manifest.json", style = Typography.bodySmall, color = OnSurfaceVariant)
-                    Text("• settings.json (profile & preferences)", style = Typography.bodySmall, color = OnSurfaceVariant)
-                    Text("• database/gym_database (SQLite)", style = Typography.bodySmall, color = OnSurfaceVariant)
-                    Text("• progress_photos/ (if any)", style = Typography.bodySmall, color = OnSurfaceVariant)
+                    Text(
+                        "Backup contains:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = cs.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text("• manifest.json", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("• settings.json (profile & preferences)", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("• database/gym_database (SQLite)", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                    Text("• progress_photos/ (if any)", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
             }
 
@@ -209,43 +223,49 @@ private fun BackupRestoreScreen(
                 onClick = { exportLauncher.launch(BackupRestoreManager.BACKUP_FILE_NAME) },
                 enabled = !isLoading,
                 modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+                shape = MaterialTheme.shapes.large
             ) {
                 Icon(Icons.Default.Backup, null)
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Export Backup", style = Typography.titleMedium)
-                    Text("Save gymai_backup.zip", style = Typography.bodySmall, color = OnPrimary.copy(0.8f))
+                    Text("Export Backup", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Save gymai_backup.zip",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onPrimary.copy(alpha = 0.85f)
+                    )
                 }
             }
 
-            Button(
+            FilledTonalButton(
                 onClick = { importLauncher.launch(arrayOf(BackupRestoreManager.BACKUP_MIME, "application/octet-stream")) },
                 enabled = !isLoading,
                 modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Secondary, contentColor = OnPrimary)
+                shape = MaterialTheme.shapes.large
             ) {
                 Icon(Icons.Default.Restore, null)
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Restore Backup", style = Typography.titleMedium)
-                    Text("Select gymai_backup.zip", style = Typography.bodySmall, color = OnPrimary.copy(0.8f))
+                    Text("Restore Backup", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Select gymai_backup.zip",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSecondaryContainer.copy(alpha = 0.85f)
+                    )
                 }
             }
 
             if (isLoading) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Primary)
+                    GymLoadingIndicator()
                 }
             }
 
             statusMessage?.let { msg ->
                 Text(
                     msg,
-                    color = if (isError) Error else Secondary,
-                    style = Typography.bodyMedium,
+                    color = if (isError) cs.error else cs.secondary,
+                    style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -255,8 +275,8 @@ private fun BackupRestoreScreen(
 
             Text(
                 "Optional: Android can back up app data if your phone uses a Google account and \"Back up to Google Drive\" is turned on in system settings. The app does not ask for Google login — your phone handles that. For a reliable copy, use Export Backup above.",
-                style = Typography.bodySmall,
-                color = OnSurfaceVariant.copy(0.7f),
+                style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant.copy(alpha = 0.75f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )

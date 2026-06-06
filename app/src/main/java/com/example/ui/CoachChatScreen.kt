@@ -34,12 +34,18 @@ import com.example.GymViewModel
 import com.example.data.CoachHistorySession
 import com.example.ui.theme.*
 
-private enum class CoachNav { Chat, HistoryList, HistoryDetail }
+/** Coach sub-navigation lifted to [MainScreen] when embedded in the main tab shell. */
+enum class CoachSubNav { Chat, HistoryList, HistoryDetail }
 
 @Composable
 fun CoachChatScreen(
     viewModel: GymViewModel,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    subNav: CoachSubNav = CoachSubNav.Chat,
+    onSubNavChange: (CoachSubNav) -> Unit = {},
+    selectedHistoryId: String? = null,
+    onSelectedHistoryIdChange: (String?) -> Unit = {},
+    embedded: Boolean = true
 ) {
     val messages by viewModel.coachChatMessages.collectAsState()
     val loading by viewModel.coachChatLoading.collectAsState()
@@ -63,19 +69,14 @@ fun CoachChatScreen(
     val historySessions by viewModel.coachHistorySessions.collectAsState()
     val pendingExercise by viewModel.pendingExerciseSteps.collectAsState()
 
-    var coachNav by remember { mutableStateOf(CoachNav.Chat) }
-    var selectedHistoryId by remember { mutableStateOf<String?>(null) }
     var historyDetail by remember { mutableStateOf<CoachHistorySession?>(null) }
 
-    LaunchedEffect(Unit) {
-        viewModel.ensureCoachWelcomeMessage()
-    }
     LaunchedEffect(profile, sets, meals, aiConfigured, aiConfigRevision) {
         viewModel.refreshCoachPromptChips()
     }
     LaunchedEffect(pendingExercise) {
         pendingExercise?.let { name ->
-            coachNav = CoachNav.Chat
+            onSubNavChange(CoachSubNav.Chat)
             viewModel.sendExerciseStepsFromAi(name)
             viewModel.clearPendingExerciseSteps()
         }
@@ -84,24 +85,26 @@ fun CoachChatScreen(
         historyDetail = selectedHistoryId?.let { viewModel.loadCoachHistorySession(it) }
     }
 
-    when (coachNav) {
-        CoachNav.HistoryList -> CoachHistoryListScreen(
+    when (subNav) {
+        CoachSubNav.HistoryList -> CoachHistoryListScreen(
             sessions = historySessions,
-            onBack = { coachNav = CoachNav.Chat },
+            onBack = { onSubNavChange(CoachSubNav.Chat) },
             onOpenSession = { id ->
-                selectedHistoryId = id
-                coachNav = CoachNav.HistoryDetail
-            }
+                onSelectedHistoryIdChange(id)
+                onSubNavChange(CoachSubNav.HistoryDetail)
+            },
+            embedded = embedded
         )
-        CoachNav.HistoryDetail -> CoachHistoryDetailScreen(
+        CoachSubNav.HistoryDetail -> CoachHistoryDetailScreen(
             session = historyDetail,
             onBack = {
-                selectedHistoryId = null
+                onSelectedHistoryIdChange(null)
                 historyDetail = null
-                coachNav = CoachNav.HistoryList
-            }
+                onSubNavChange(CoachSubNav.HistoryList)
+            },
+            embedded = embedded
         )
-        CoachNav.Chat -> CoachChatMainContent(
+        CoachSubNav.Chat -> CoachChatMainContent(
             messages = messages,
             loading = loading,
             aiConfigured = aiConfigured,
@@ -112,12 +115,13 @@ fun CoachChatScreen(
             onOpenSettings = onOpenSettings,
             onOpenHistory = {
                 viewModel.refreshCoachHistory()
-                coachNav = CoachNav.HistoryList
+                onSubNavChange(CoachSubNav.HistoryList)
             },
             onSend = { text ->
                 viewModel.sendCoachMessage(text)
                 inputText = ""
-            }
+            },
+            embedded = embedded
         )
     }
 }
@@ -133,7 +137,8 @@ private fun CoachChatMainContent(
     listState: androidx.compose.foundation.lazy.LazyListState,
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
-    onSend: (String) -> Unit
+    onSend: (String) -> Unit,
+    embedded: Boolean = true
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -146,9 +151,11 @@ private fun CoachChatMainContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        CoachChatTopBar(onOpenSettings = onOpenSettings, onOpenHistory = onOpenHistory)
+        if (!embedded) {
+            CoachChatTopBar(onOpenSettings = onOpenSettings, onOpenHistory = onOpenHistory)
+        }
 
         Row(
             modifier = Modifier
@@ -168,8 +175,8 @@ private fun CoachChatMainContent(
         if (!aiConfigured) {
             Text(
                 "Configure AI in Settings for full Coach responses.",
-                style = Typography.labelSmall,
-                color = OnSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
             )
         }
@@ -214,26 +221,29 @@ private fun CoachChatMainContent(
 private fun CoachHistoryListScreen(
     sessions: List<CoachHistorySession>,
     onBack: () -> Unit,
-    onOpenSession: (String) -> Unit
+    onOpenSession: (String) -> Unit,
+    embedded: Boolean = true
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     Column(
         Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        TopAppBar(
-            title = { Text("Chat History", color = Primary) },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to chat", tint = OnSurface)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
-        )
+        if (!embedded) {
+            TopAppBar(
+                title = { Text("Chat History", color = MaterialTheme.colorScheme.primary) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to chat", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        }
         if (sessions.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No past conversations yet.", color = OnSurfaceVariant)
+                Text("No past conversations yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(
@@ -244,13 +254,13 @@ private fun CoachHistoryListScreen(
                     Card(
                         onClick = { onOpenSession(session.id) },
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(
                                 session.preview,
-                                style = Typography.titleSmall,
-                                color = OnSurface,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 fontWeight = FontWeight.SemiBold
@@ -258,8 +268,8 @@ private fun CoachHistoryListScreen(
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 session.formattedTimestamp(),
-                                style = Typography.labelSmall,
-                                color = OnSurfaceVariant
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -272,38 +282,41 @@ private fun CoachHistoryListScreen(
 @Composable
 private fun CoachHistoryDetailScreen(
     session: CoachHistorySession?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    embedded: Boolean = true
 ) {
     androidx.activity.compose.BackHandler(onBack = onBack)
     Column(
         Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        TopAppBar(
-            title = {
-                Column {
-                    Text("Past conversation", color = Primary, style = Typography.titleMedium)
-                    session?.let {
-                        Text(
-                            it.formattedTimestamp(),
-                            style = Typography.labelSmall,
-                            color = OnSurfaceVariant
-                        )
+        if (!embedded) {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Past conversation", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+                        session?.let {
+                            Text(
+                                it.formattedTimestamp(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-            },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to history", tint = OnSurface)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
-        )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to history", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        }
         Text(
             "Read-only — continue chatting from the main Coach screen.",
-            style = Typography.labelSmall,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
         LazyColumn(
@@ -334,24 +347,24 @@ private fun CoachChatTopBar(onOpenSettings: () -> Unit, onOpenHistory: () -> Uni
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(SurfaceContainerHighest)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         )
         Text(
             "Coach AI",
-            style = Typography.titleLarge,
-            color = Primary,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         IconButton(onClick = onOpenHistory) {
-            Icon(Icons.Default.History, "History", tint = Primary)
+            Icon(Icons.Default.History, "History", tint = MaterialTheme.colorScheme.primary)
         }
         IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Default.Settings, "Settings", tint = OnSurface)
+            Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurface)
         }
     }
-    HorizontalDivider(color = OutlineVariant.copy(0.25f))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.25f))
 }
 
 private val FALLBACK_CHIPS = listOf(
@@ -367,13 +380,13 @@ private fun SuggestionChip(label: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = SurfaceContainerHigh,
-        border = androidx.compose.foundation.BorderStroke(1.dp, OutlineVariant.copy(0.35f))
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.35f))
     ) {
         Text(
             label,
-            style = Typography.labelMedium,
-            color = OnSurface,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
         )
     }
@@ -401,7 +414,7 @@ private fun ChatBubble(message: CoachChatMessage) {
                     bottomStart = if (isUser) 16.dp else 4.dp,
                     bottomEnd = if (isUser) 4.dp else 16.dp
                 ),
-                color = if (isUser) SurfaceContainer else SurfaceContainerHigh
+                color = if (isUser) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 CoachMessageText(
                     text = message.text,
@@ -418,7 +431,7 @@ private fun ChatBubble(message: CoachChatMessage) {
                     .padding(start = 8.dp)
                     .size(28.dp)
                     .clip(CircleShape)
-                    .background(SurfaceContainerHighest)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
         }
     }
@@ -430,13 +443,13 @@ private fun CoachAvatar(modifier: Modifier = Modifier) {
         modifier = modifier
             .size(28.dp)
             .clip(CircleShape)
-            .background(Primary.copy(0.2f)),
+            .background(MaterialTheme.colorScheme.primary.copy(0.2f)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             Icons.Default.Psychology,
             contentDescription = "Coach AI",
-            tint = Primary,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(16.dp)
         )
     }
@@ -446,11 +459,11 @@ private fun CoachAvatar(modifier: Modifier = Modifier) {
 private fun TypingIndicator() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         CoachAvatar(modifier = Modifier.padding(end = 8.dp))
-        Surface(shape = RoundedCornerShape(16.dp), color = SurfaceContainerHigh) {
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Text(
                 "…",
-                style = Typography.bodyLarge,
-                color = OnSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
             )
         }
@@ -469,12 +482,12 @@ fun CoachMessageText(text: String, modifier: Modifier = Modifier) {
                 val isBullet = line.trimStart().startsWith("-") || line.trimStart().startsWith("•")
                 Row {
                     if (isBullet) {
-                        Text("• ", style = Typography.bodyMedium, color = OnSurface)
+                        Text("• ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Text(
-                        text = parseCoachMarkdown(display),
-                        style = Typography.bodyMedium,
-                        color = OnSurface
+                        text = parseCoachMarkdown(display, MaterialTheme.colorScheme.primary),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -482,7 +495,7 @@ fun CoachMessageText(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-private fun parseCoachMarkdown(text: String) = buildAnnotatedString {
+private fun parseCoachMarkdown(text: String, primaryColor: androidx.compose.ui.graphics.Color) = buildAnnotatedString {
     var i = 0
     while (i < text.length) {
         val boldStart = text.indexOf("**", i)
@@ -496,7 +509,7 @@ private fun parseCoachMarkdown(text: String) = buildAnnotatedString {
             append(text.substring(boldStart))
             break
         }
-        withStyle(androidx.compose.ui.text.SpanStyle(color = Primary, fontWeight = FontWeight.SemiBold)) {
+        withStyle(androidx.compose.ui.text.SpanStyle(color = primaryColor, fontWeight = FontWeight.SemiBold)) {
             append(text.substring(boldStart + 2, boldEnd))
         }
         i = boldEnd + 2
@@ -513,13 +526,13 @@ private fun CoachChatInputBar(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = SurfaceContainer,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = modifier.fillMaxWidth(),
         tonalElevation = 6.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, OutlineVariant.copy(0.15f))
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.15f))
     ) {
         Column {
-            HorizontalDivider(color = OutlineVariant.copy(0.2f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -532,9 +545,9 @@ private fun CoachChatInputBar(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(SurfaceContainerHigh)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 ) {
-                    Icon(Icons.Default.Mic, "Voice", tint = Primary)
+                    Icon(Icons.Default.Mic, "Voice", tint = MaterialTheme.colorScheme.primary)
                 }
 
                 Box(
@@ -542,8 +555,8 @@ private fun CoachChatInputBar(
                         .weight(1f)
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(SurfaceContainerLow)
-                        .border(1.dp, OutlineVariant.copy(0.3f), RoundedCornerShape(24.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.3f), RoundedCornerShape(24.dp))
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
@@ -551,16 +564,16 @@ private fun CoachChatInputBar(
                         value = value,
                         onValueChange = onValueChange,
                         enabled = enabled,
-                        textStyle = Typography.bodyMedium.copy(color = OnSurface),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Primary),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth().padding(end = 40.dp),
                         decorationBox = { inner ->
                             Box(Modifier.fillMaxWidth()) {
                                 if (value.isEmpty()) {
                                     Text(
                                         "Ask Coach AI...",
-                                        style = Typography.bodyMedium,
-                                        color = OnSurfaceVariant.copy(0.5f)
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f)
                                     )
                                 }
                                 inner()
@@ -575,12 +588,12 @@ private fun CoachChatInputBar(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
                                 .size(36.dp)
-                                .background(Primary, CircleShape)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Send,
                                 "Send",
-                                tint = OnPrimary,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }

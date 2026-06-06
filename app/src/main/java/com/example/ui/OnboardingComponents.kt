@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,15 +34,15 @@ fun OnboardingTextField(
 ) {
     Column(modifier = modifier) {
         if (label.isNotBlank()) {
-            Text(label, style = Typography.bodySmall, color = OnSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
             Spacer(modifier = Modifier.height(4.dp))
         }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .background(SurfaceContainer, RoundedCornerShape(12.dp))
-                .border(1.dp, OutlineVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -51,14 +50,14 @@ fun OnboardingTextField(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    textStyle = Typography.bodyLarge.copy(color = OnSurface, fontSize = 18.sp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                    cursorBrush = SolidColor(Primary),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.weight(1f)
                 )
                 suffix?.let {
-                    Text(it, style = Typography.bodyMedium, color = OnSurfaceVariant)
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -76,7 +75,7 @@ fun OnboardingDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = modifier) {
-        Text(label, style = Typography.bodySmall, color = OnSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
         Spacer(modifier = Modifier.height(4.dp))
         ExposedDropdownMenuBox(
             expanded = expanded,
@@ -87,8 +86,8 @@ fun OnboardingDropdown(
                     .menuAnchor()
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(SurfaceContainer, RoundedCornerShape(12.dp))
-                    .border(1.dp, OutlineVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -97,18 +96,18 @@ fun OnboardingDropdown(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(value, style = Typography.bodyMedium, color = OnSurface)
-                    Icon(Icons.Default.ArrowDropDown, null, tint = OnSurfaceVariant)
+                    Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             ExposedDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.background(SurfaceContainerHigh)
+                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
             ) {
                 options.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option, color = OnSurface) },
+                        text = { Text(option, color = MaterialTheme.colorScheme.onSurface) },
                         onClick = {
                             onSelect(option)
                             expanded = false
@@ -126,22 +125,22 @@ fun OnboardingInfoCard(title: String, value: String, subtitle: String? = null, h
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (highlight) Primary.copy(0.08f) else Color.White.copy(0.05f),
+                if (highlight) MaterialTheme.colorScheme.primary.copy(0.08f) else Color.White.copy(0.05f),
                 RoundedCornerShape(12.dp)
             )
             .border(
                 1.dp,
-                if (highlight) Primary.copy(0.3f) else OutlineVariant.copy(0.3f),
+                if (highlight) MaterialTheme.colorScheme.primary.copy(0.3f) else MaterialTheme.colorScheme.outlineVariant.copy(0.3f),
                 RoundedCornerShape(12.dp)
             )
             .padding(16.dp)
     ) {
-        Text(title, style = Typography.labelMedium, color = if (highlight) Primary else OnSurfaceVariant)
+        Text(title, style = MaterialTheme.typography.labelMedium, color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(value, style = Typography.headlineMedium, color = if (highlight) Primary else OnSurface)
+        Text(value, style = MaterialTheme.typography.headlineMedium, color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
         subtitle?.let {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(it, style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -158,10 +157,10 @@ fun GoalCard(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isSelected) Primary.copy(0.08f) else SurfaceContainer,
+                if (isSelected) MaterialTheme.colorScheme.primary.copy(0.08f) else MaterialTheme.colorScheme.surfaceContainer,
                 RoundedCornerShape(12.dp)
             )
-            .border(1.dp, if (isSelected) Primary else OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
+            .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
             .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -172,32 +171,32 @@ fun GoalCard(
                 Modifier
                     .size(40.dp)
                     .background(
-                        if (isSelected) Primary.copy(0.2f) else Color.White.copy(0.06f),
+                        if (isSelected) MaterialTheme.colorScheme.primary.copy(0.2f) else Color.White.copy(0.06f),
                         RoundedCornerShape(10.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = if (isSelected) Primary else OnSurfaceVariant, modifier = Modifier.size(22.dp))
+                Icon(icon, null, tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
             }
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
+            Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
             subtitle?.let {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(it, style = Typography.bodySmall, color = OnSurfaceVariant)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (isSelected) {
             Box(
                 Modifier
                     .size(24.dp)
-                    .background(Primary, RoundedCornerShape(50)),
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Check, null, tint = OnPrimary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
             }
         } else {
-            Box(Modifier.size(24.dp).border(2.dp, OutlineVariant, RoundedCornerShape(50)))
+            Box(Modifier.size(24.dp).border(2.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(50)))
         }
     }
 }
@@ -214,7 +213,7 @@ fun MacroEditRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = Typography.bodyMedium, color = OnSurface, modifier = Modifier.width(72.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.width(72.dp))
         OnboardingTextField(
             label = "",
             value = value,

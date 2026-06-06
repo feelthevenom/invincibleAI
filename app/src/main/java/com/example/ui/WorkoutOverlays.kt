@@ -27,7 +27,6 @@ import com.example.GymViewModel
 import com.example.data.CustomExercise
 import com.example.data.ExerciseItem
 import com.example.data.WorkoutExerciseGroup
-import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
 private val EXERCISE_TYPES = listOf(
@@ -79,7 +78,7 @@ fun ExerciseSearchOverlay(
                 .fillMaxSize()
                 .padding(top = 48.dp),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            color = Surface
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
@@ -94,7 +93,7 @@ fun ExerciseSearchOverlay(
                             else -> onDismiss()
                         }
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Primary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.primary)
                     }
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -102,14 +101,14 @@ fun ExerciseSearchOverlay(
                                 is ExerciseSheetPage.Custom -> "Create Exercise"
                                 else -> "Add Exercise"
                             },
-                            style = Typography.titleLarge,
-                            color = OnSurface
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(dayLabel, style = Typography.bodySmall, color = OnSurfaceVariant)
+                        Text(dayLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
-                HorizontalDivider(color = OutlineVariant.copy(0.2f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
 
                 when (val current = page) {
                     ExerciseSheetPage.Search -> ExerciseSearchPage(
@@ -172,29 +171,24 @@ private fun ExerciseSearchPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
-            placeholder = { Text("Search exercises… e.g. bench press, curl", color = OnSurfaceVariant) },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = Primary) },
+            placeholder = { Text("Search exercises… e.g. bench press, curl") },
+            leadingIcon = { Icon(Icons.Default.Search, null) },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Primary,
-                unfocusedBorderColor = OutlineVariant.copy(0.4f),
-                focusedTextColor = OnSurface,
-                unfocusedTextColor = OnSurface
-            )
+            shape = MaterialTheme.shapes.medium,
+            colors = m3OutlinedTextFieldColors()
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "55+ exercises · Push/Pull/Legs · Tap title to add",
-            style = Typography.labelMedium,
-            color = OnSurfaceVariant.copy(0.6f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
             modifier = Modifier.padding(horizontal = 20.dp)
         )
         Spacer(Modifier.height(8.dp))
 
         if (searchState.isLoading) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
+                GymLoadingIndicator()
             }
         }
 
@@ -226,21 +220,17 @@ private fun ExerciseSearchPage(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     if (searchState.aiLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = Primary
-                        )
+                        GymLoadingIndicatorSmall(modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Generating…")
                     } else {
-                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp), tint = Primary)
+                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("AI Suggest Exercises (up to 5)", color = Primary)
+                        Text("AI Suggest Exercises (up to 5)")
                     }
                 }
                 searchState.aiError?.let { err ->
-                    Text(err, color = Error, style = Typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                    Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                 }
             }
 
@@ -335,7 +325,7 @@ private fun ExerciseSearchPage(
                 TextButton(onClick = {
                     exerciseToDelete?.let { viewModel.deleteCustomExercise(it) }
                     exerciseToDelete = null
-                }) { Text("Delete", color = Error) }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { exerciseToDelete = null }) { Text("Cancel") }
@@ -379,22 +369,22 @@ private fun CustomExerciseCreatePage(
             shape = RoundedCornerShape(12.dp)
         )
 
-        Text("Cardio exercise", style = Typography.labelMedium, color = OnSurfaceVariant)
+        Text("Cardio exercise", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = isCardio, onClick = { isCardio = true })
-                Text("On", color = OnSurface)
+                Text("On", color = MaterialTheme.colorScheme.onSurface)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = !isCardio, onClick = { isCardio = false })
-                Text("Off", color = OnSurface)
+                Text("Off", color = MaterialTheme.colorScheme.onSurface)
             }
         }
         if (isCardio) {
             Text(
                 "Cardio uses a timer and calories — no sets, reps, or weight.",
-                style = Typography.bodySmall,
-                color = OnSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -538,7 +528,7 @@ fun EditExerciseDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onRemove) { Text("Remove", color = Error) }
+                TextButton(onClick = onRemove) { Text("Remove", color = MaterialTheme.colorScheme.error) }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         }
@@ -553,11 +543,12 @@ private fun AiExerciseSuggestionCard(
     onAdd: () -> Unit
 ) {
     val isCardio = exercise.isCardio || exercise.exerciseType.equals("Cardio", ignoreCase = true)
+    val cs = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceContainerHighest.copy(0.35f), RoundedCornerShape(12.dp))
-            .border(1.dp, Primary.copy(0.25f), RoundedCornerShape(12.dp))
+            .background(cs.surfaceContainerHighest.copy(0.35f), RoundedCornerShape(12.dp))
+            .border(1.dp, cs.primary.copy(0.25f), RoundedCornerShape(12.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -567,7 +558,8 @@ private fun AiExerciseSuggestionCard(
             label = { Text("Exercise name") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(10.dp)
+            shape = MaterialTheme.shapes.medium,
+            colors = m3OutlinedTextFieldColors()
         )
         Text(
             if (isCardio) {
@@ -575,8 +567,8 @@ private fun AiExerciseSuggestionCard(
             } else {
                 "${exercise.exerciseType} · ${exercise.defaultSets} sets × ${exercise.defaultReps} reps"
             },
-            style = Typography.bodySmall,
-            color = OnSurfaceVariant
+            style = MaterialTheme.typography.bodySmall,
+            color = cs.onSurfaceVariant
         )
         Button(
             onClick = onAdd,
@@ -600,25 +592,26 @@ private fun ExerciseListItem(
     onClick: () -> Unit,
     onIconClick: (() -> Unit)? = null
 ) {
+    val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (highlight) PrimaryContainer.copy(0.35f) else SurfaceContainerHighest.copy(0.3f),
+                if (highlight) cs.primaryContainer.copy(0.35f) else cs.surfaceContainerHighest.copy(0.3f),
                 RoundedCornerShape(12.dp)
             )
-            .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
+            .border(1.dp, cs.outlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(name, style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
-            Text(subtitle, style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text(name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = cs.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         }
         if (icon != null && onIconClick != null) {
             IconButton(onClick = onIconClick) {
-                Icon(icon, null, tint = Error.copy(0.8f))
+                Icon(icon, null, tint = cs.error.copy(0.8f))
             }
         }
     }
@@ -628,8 +621,8 @@ private fun ExerciseListItem(
 private fun WorkoutSectionHeader(text: String) {
     Text(
         text,
-        style = Typography.labelMedium,
-        color = OnSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp)
     )
 }

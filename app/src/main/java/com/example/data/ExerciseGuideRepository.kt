@@ -6,14 +6,18 @@ import android.net.NetworkCapabilities
 import com.example.data.api.ExerciseDbApiClient
 import com.example.data.api.ExerciseDbExerciseDto
 import com.example.data.api.ExerciseDbRateLimitException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 enum class GuideSource { API, AI }
 
@@ -187,50 +191,64 @@ class ExerciseGuideRepository(
 
     suspend fun loadGuide(exerciseName: String, forceOnline: Boolean = false): ExerciseGuideResult =
         withContext(Dispatchers.IO) {
-            val lookupKey = ExerciseNameMatcher.normalize(exerciseName)
-            if (lookupKey.isBlank()) {
-                return@withContext ExerciseGuideResult.Error("Invalid exercise name.")
-            }
-
-            if (!forceOnline) {
-                gymDao.getCachedExerciseGuide(lookupKey)?.let { cached ->
-                    val cacheValid = cached.source == "ai" ||
-                        ExerciseNameMatcher.score(exerciseName, cached.apiName) >= 80
-                    if (cacheValid) {
-                        return@withContext ExerciseGuideResult.Success(cached.toDetail(exerciseName))
-                    }
-                }
-            }
-
-            if (!isOnline()) {
-                return@withContext ExerciseGuideResult.OfflineNoCache
-            }
-
             try {
-                val full = findExerciseOnline(exerciseName)
-                    ?: return@withContext ExerciseGuideResult.NoOnlineMatch
-
-                val localPath = downloadGif(full.exerciseId, full.gifUrl)
-                val entity = CachedExerciseGuide(
-                    lookupKey = lookupKey,
-                    exerciseId = full.exerciseId,
-                    apiName = full.name,
-                    gifUrl = full.gifUrl,
-                    localGifPath = localPath,
-                    instructionsJson = JSONArray(full.instructions.orEmpty()).toString(),
-                    targetMusclesJson = JSONArray(full.targetMuscles.orEmpty()).toString(),
-                    equipmentsJson = JSONArray(full.equipments.orEmpty()).toString(),
-                    bodyPartsJson = JSONArray(full.bodyParts.orEmpty()).toString(),
-                    source = "api"
-                )
-                gymDao.upsertCachedExerciseGuide(entity)
-                ExerciseGuideResult.Success(entity.toDetail(exerciseName, fromCache = false))
-            } catch (_: ExerciseDbRateLimitException) {
-                ExerciseGuideResult.RateLimited
-            } catch (e: Exception) {
-                ExerciseGuideResult.Error(e.message ?: "Failed to load exercise tutorial.")
+                withTimeout(45_000L) {
+                    loadGuideInternal(exerciseName, forceOnline)
+                }
+            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                ExerciseGuideResult.Error("Tutorial load timed out. Try again or use AI Fill.")
+            } catch (_: CancellationException) {
+                ExerciseGuideResult.Error("Tutorial load was interrupted. Try again.")
             }
         }
+
+    private suspend fun loadGuideInternal(exerciseName: String, forceOnline: Boolean): ExerciseGuideResult {
+        val lookupKey = ExerciseNameMatcher.normalize(exerciseName)
+        if (lookupKey.isBlank()) {
+            return ExerciseGuideResult.Error("Invalid exercise name.")
+        }
+
+        if (!forceOnline) {
+            gymDao.getCachedExerciseGuide(lookupKey)?.let { cached ->
+                val cacheValid = cached.source == "ai" ||
+                    ExerciseNameMatcher.score(exerciseName, cached.apiName) >= 80
+                if (cacheValid) {
+                    return ExerciseGuideResult.Success(cached.toDetail(exerciseName))
+                }
+            }
+        }
+
+        if (!isOnline()) {
+            return ExerciseGuideResult.OfflineNoCache
+        }
+
+        return try {
+            val full = findExerciseOnline(exerciseName)
+                ?: return ExerciseGuideResult.NoOnlineMatch
+
+            val localPath = downloadGif(full.exerciseId, full.gifUrl)
+            val entity = CachedExerciseGuide(
+                lookupKey = lookupKey,
+                exerciseId = full.exerciseId,
+                apiName = full.name,
+                gifUrl = full.gifUrl,
+                localGifPath = localPath,
+                instructionsJson = JSONArray(full.instructions.orEmpty()).toString(),
+                targetMusclesJson = JSONArray(full.targetMuscles.orEmpty()).toString(),
+                equipmentsJson = JSONArray(full.equipments.orEmpty()).toString(),
+                bodyPartsJson = JSONArray(full.bodyParts.orEmpty()).toString(),
+                source = "api"
+            )
+            gymDao.upsertCachedExerciseGuide(entity)
+            ExerciseGuideResult.Success(entity.toDetail(exerciseName, fromCache = false))
+        } catch (_: ExerciseDbRateLimitException) {
+            ExerciseGuideResult.RateLimited
+        } catch (_: CancellationException) {
+            ExerciseGuideResult.Error("Tutorial load was interrupted. Try again.")
+        } catch (e: Exception) {
+            ExerciseGuideResult.Error(e.message ?: "Failed to load exercise tutorial.")
+        }
+    }
 
     suspend fun saveAiGuide(
         exerciseName: String,
@@ -308,16 +326,27 @@ class ExerciseGuideRepository(
         if (url.isBlank()) return null
         val target = File(gifDir, "$exerciseId.gif")
         if (target.exists() && target.length() > 0) return target.absolutePath
-        return try {
+        return suspendCancellableCoroutine { cont ->
             val request = Request.Builder().url(url).get().build()
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val body = response.body?.bytes() ?: return null
-                target.writeBytes(body)
-                target.absolutePath
+            val call = httpClient.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            try {
+                call.execute().use { response ->
+                    if (!response.isSuccessful) {
+                        cont.resume(null)
+                        return@suspendCancellableCoroutine
+                    }
+                    val body = response.body?.bytes()
+                    if (body == null) {
+                        cont.resume(null)
+                        return@suspendCancellableCoroutine
+                    }
+                    target.writeBytes(body)
+                    cont.resume(target.absolutePath)
+                }
+            } catch (_: Exception) {
+                if (cont.isActive) cont.resume(null)
             }
-        } catch (_: Exception) {
-            null
         }
     }
 

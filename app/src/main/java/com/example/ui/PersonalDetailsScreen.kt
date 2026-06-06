@@ -36,6 +36,7 @@ import com.example.data.ProfileValidation
 import com.example.data.UserProfile
 import com.example.data.WorkoutPreferences
 import com.example.ui.theme.*
+import androidx.compose.ui.text.font.FontWeight
 
 private enum class PersonalEditSection { Physical, ActivityGoal, Weight, Nutrition, Workout, Cuisines, Weekly }
 
@@ -193,16 +194,19 @@ fun PersonalDetailsScreenContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Personal Details", style = Typography.headlineMedium, color = Primary) },
+                title = { Text("Personal Details", style = MaterialTheme.typography.headlineMedium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         },
-        containerColor = Background
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             modifier = Modifier
@@ -278,7 +282,7 @@ fun PersonalDetailsScreenContent(
             if (editingSection == PersonalEditSection.ActivityGoal) {
                 OnboardingDropdown("Activity Level", activityLevel, FitnessCalculator.activityLevels, onSelect = { activityLevel = it })
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("PRIMARY GOAL", style = Typography.labelMedium, color = OnSurfaceVariant)
+                Text("PRIMARY GOAL", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 FitnessCalculator.goals.forEach { g ->
                     GoalCard(title = g, isSelected = goal == g, icon = GoalIcons.iconFor(g)) { goal = g }
@@ -463,7 +467,7 @@ fun PersonalDetailsScreenContent(
                         val change = weeklyItems[it].substringBefore(" ").toFloatOrNull() ?: 0f
                         weeklyWarning = ProfileValidation.validateWeeklyChange(profile.goal, profile.currentWeight, change).message
                     })
-                    weeklyWarning?.let { Text(it, color = Error, style = Typography.bodySmall) }
+                    weeklyWarning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 } else {
                     ReadOnlyField("Target Change", "${String.format("%.2f", profile.targetWeightChangePerWeek)} kg/wk")
                 }
@@ -486,6 +490,18 @@ fun PersonalDetailsScreenPreview() {
 }
 
 @Composable
+private fun ProfileSectionCard(content: @Composable ColumnScope.() -> Unit) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    }
+}
+
+@Composable
 private fun SectionHeader(
     title: String,
     isEditing: Boolean,
@@ -498,15 +514,15 @@ private fun SectionHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = Typography.labelMedium, color = OnSurfaceVariant)
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         if (isEditing) {
             Row {
-                TextButton(onClick = onCancel) { Text("Cancel", color = Error) }
-                TextButton(onClick = onConfirm) { Text("Confirm", color = Primary) }
+                TextButton(onClick = onCancel) { Text("Cancel", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onConfirm) { Text("Confirm", color = MaterialTheme.colorScheme.primary) }
             }
         } else {
             IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Edit, "Edit", tint = Primary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -514,16 +530,9 @@ private fun SectionHeader(
 
 @Composable
 private fun DietTimelineSection(profile: UserProfile) {
-    Text("Step 5 — Diet Timeline", style = Typography.labelMedium, color = OnSurfaceVariant)
+    Text("Step 5 — Diet Timeline", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(modifier = Modifier.height(8.dp))
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(0.05f), RoundedCornerShape(12.dp))
-            .border(1.dp, OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    ProfileSectionCard {
         ReadOnlyField("Target Weight Change / Week", "${String.format("%.2f", profile.targetWeightChangePerWeek)} kg")
         ReadOnlyField("Weeks to Goal", if (profile.weeksToGoal > 0) "${profile.weeksToGoal} weeks" else "At goal")
         ReadOnlyField("Maintenance Calories", "${profile.maintenanceCalories} kcal/day")
@@ -565,16 +574,9 @@ private fun WorkoutProfileSection(
 ) {
     sectionHeader()
     Spacer(modifier = Modifier.height(8.dp))
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(0.05f), RoundedCornerShape(12.dp))
-            .border(1.dp, OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    ProfileSectionCard {
         if (isEditMode) {
-            Text("Fitness Level", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Fitness Level", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkoutPreferences.FITNESS_LEVELS.forEach { level ->
                 GoalCard(title = level, isSelected = fitnessLevel == level) { onFitnessLevel(level) }
                 Spacer(Modifier.height(4.dp))
@@ -582,35 +584,35 @@ private fun WorkoutProfileSection(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = benchmarkSkipped, onCheckedChange = onBenchmarkSkipped)
-                Text("I'm a beginner — skip 1RM benchmarks", style = Typography.bodySmall, color = OnSurface)
+                Text("I'm a beginner — skip 1RM benchmarks", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
             }
             if (!benchmarkSkipped) {
                 OnboardingTextField("Squat 1RM", squat1Rm, onSquat1Rm, suffix = "kg")
                 OnboardingTextField("Bench Press 1RM", bench1Rm, onBench1Rm, suffix = "kg")
                 OnboardingTextField("Deadlift 1RM", deadlift1Rm, onDeadlift1Rm, suffix = "kg")
             }
-            Text("Workout Frequency", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Workout Frequency", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkoutPreferences.WORKOUT_FREQUENCY_OPTIONS.forEach { option ->
                 GoalCard(title = option.label, isSelected = workoutDays == option.daysPerWeek) {
                     onWorkoutDays(option.daysPerWeek)
                 }
                 Spacer(Modifier.height(4.dp))
             }
-            Text("Week Starts On", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Week Starts On", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkoutPreferences.WEEK_DAYS.forEach { day ->
                 GoalCard(title = day.label, isSelected = weekStartDay == day.calendarDay) {
                     onWeekStartDay(day.calendarDay)
                 }
                 Spacer(Modifier.height(4.dp))
             }
-            Text("Equipment", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Equipment", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkoutPreferences.EQUIPMENT_OPTIONS.forEach { eq ->
                 GoalCard(title = eq.label, subtitle = eq.group, isSelected = eq.id in selectedEquipment) {
                     onToggleEquipment(eq.id)
                 }
                 Spacer(Modifier.height(4.dp))
             }
-            Text("Training Location", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Training Location", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkoutPreferences.GYM_LOCATIONS.forEach { loc ->
                 GoalCard(title = loc.label, subtitle = loc.description, isSelected = gymLocation == loc.id) {
                     onGymLocation(loc.id)
@@ -629,21 +631,14 @@ private fun WorkoutProfileSection(
                 ReadOnlyField("Combined 1RM Total", "${total.toInt()} kg")
             }
         } else {
-            Text("Complete workout setup from the Workout tab flow on first launch.", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Complete workout setup from the Workout tab flow on first launch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
 private fun PersonalMetricsCard(profile: UserProfile) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(0.05f), RoundedCornerShape(12.dp))
-            .border(1.dp, OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    ProfileSectionCard {
         ReadOnlyField("Age", "${profile.age} years")
         ReadOnlyField("Gender", profile.gender)
         ReadOnlyField("Height", "${profile.height} cm")
@@ -652,14 +647,7 @@ private fun PersonalMetricsCard(profile: UserProfile) {
 
 @Composable
 private fun ActivityGoalCard(profile: UserProfile) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(0.05f), RoundedCornerShape(12.dp))
-            .border(1.dp, OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
+    ProfileSectionCard {
         ReadOnlyField("Activity Level", profile.activityLevel)
         ReadOnlyField("Primary Goal", profile.goal)
     }
@@ -671,16 +659,11 @@ private fun ReadOnlyField(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, style = Typography.bodyMedium, color = OnSurfaceVariant)
-        Text(value, style = Typography.bodyMedium, color = OnSurface)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
-    AiSettingsScreen(viewModel = viewModel, onBack = onBack)
-}
 
 @Composable
 internal fun ApiKeyCard(
@@ -698,7 +681,7 @@ internal fun ApiKeyCard(
     authenticate: (() -> Unit) -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(0.3f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -712,7 +695,7 @@ internal fun ApiKeyCard(
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = onSave) {
-                            Icon(Icons.Default.Save, null, tint = Primary)
+                            Icon(Icons.Default.Save, null, tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 )
@@ -725,11 +708,11 @@ internal fun ApiKeyCard(
                     if (hasKey) {
                         Text(
                             if (isKeyVisible) currentKey!! else "••••••••••••",
-                            color = OnSurface,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
                     } else {
-                        Text("No API Key Set", color = OnSurfaceVariant, modifier = Modifier.weight(1f))
+                        Text("No API Key Set", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     }
                     Row {
                         if (hasKey) {
@@ -737,14 +720,14 @@ internal fun ApiKeyCard(
                                 Icon(
                                     if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     null,
-                                    tint = Primary
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                             IconButton(onClick = { authenticate(onEdit) }) {
-                                Icon(Icons.Default.Edit, null, tint = Primary)
+                                Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary)
                             }
                             IconButton(onClick = { authenticate(onClear) }) {
-                                Icon(Icons.Default.Delete, null, tint = Error)
+                                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
                             }
                         } else {
                             Button(onClick = onShowInput) { Text("Add Key") }
@@ -769,32 +752,27 @@ fun ModelDownloadCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(0.3f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = Typography.bodyLarge, color = OnSurface)
-                    if (isDownloaded) Text("Downloaded — select from OFFLINE MODEL above", style = Typography.labelSmall, color = Secondary)
+                    Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    if (isDownloaded) Text("Downloaded — select from OFFLINE MODEL above", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
                 if (isDownloaded) {
-                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Error) }
+                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                 } else if (isDownloading) {
-                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, null, tint = OnSurfaceVariant) }
+                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else if (isCompatible) {
-                    IconButton(onClick = onDownload) { Icon(Icons.Default.Download, null, tint = Primary) }
+                    IconButton(onClick = onDownload) { Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.primary) }
                 }
             }
             if (isDownloading) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Primary,
-                    trackColor = SurfaceContainerHighest
-                )
-                Text("${(progress * 100).toInt()}%", style = Typography.labelSmall, modifier = Modifier.align(Alignment.End))
+                GymModelDownloadProgress(progress = progress)
+                Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.End))
             } else {
                 Text(
                     when {
@@ -802,8 +780,8 @@ fun ModelDownloadCard(
                         isCompatible -> "Tap download to install"
                         else -> "Needs more RAM for this model"
                     },
-                    style = Typography.bodySmall,
-                    color = if (isDownloaded) Secondary else OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isDownloaded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -828,34 +806,29 @@ fun ModelCard(
             .fillMaxWidth()
             .clickable(enabled = isDownloaded) { onSelect() },
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Primary.copy(0.1f) else SurfaceContainerHighest.copy(0.3f)
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(0.3f)
         ),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Primary) else null,
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(title, style = Typography.bodyLarge, color = if (isSelected) Primary else OnSurface)
-                    if (isSelected) Text("Currently Active", style = Typography.labelSmall, color = Primary)
+                    Text(title, style = MaterialTheme.typography.bodyLarge, color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    if (isSelected) Text("Currently Active", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
                 if (isDownloaded) {
-                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Error) }
+                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                 } else if (isDownloading) {
-                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, null, tint = OnSurfaceVariant) }
+                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else if (isCompatible) {
-                    IconButton(onClick = onDownload) { Icon(Icons.Default.Download, null, tint = Primary) }
+                    IconButton(onClick = onDownload) { Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.primary) }
                 }
             }
             if (isDownloading) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Primary,
-                    trackColor = SurfaceContainerHighest
-                )
-                Text("${(progress * 100).toInt()}%", style = Typography.labelSmall, modifier = Modifier.align(Alignment.End))
+                GymModelDownloadProgress(progress = progress)
+                Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.End))
             } else {
                 Text(
                     when {
@@ -863,8 +836,8 @@ fun ModelCard(
                         isCompatible -> "Tap download to install"
                         else -> "Needs more RAM for this model"
                     },
-                    style = Typography.bodySmall,
-                    color = if (isDownloaded) Secondary else OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isDownloaded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

@@ -60,7 +60,9 @@ data class UserProfile(
     val waterReminderWindowEndMinute: Int = 22 * 60,
     val workoutReminderEnabled: Boolean = false,
     val workoutReminderTimeMinute: Int = 6 * 60 + 30,
-    val workoutReminderRepeat: Boolean = true
+    val workoutReminderRepeat: Boolean = true,
+    val themeMode: String = "system", // system | light | dark
+    val notificationsLastViewedAt: Long = 0L
 )
 
 @Entity(tableName = "daily_goal_snapshots")

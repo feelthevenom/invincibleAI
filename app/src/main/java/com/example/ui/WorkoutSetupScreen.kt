@@ -145,10 +145,10 @@ fun WorkoutSetupScreenContent(
         workoutDays, weekStartDay, selectedEquipment, gymLocation
     ) { buildProfile() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column {
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(SurfaceContainerHighest)) {
-                Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(Primary))
+            Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(MaterialTheme.colorScheme.surfaceVariant)) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(animatedProgress).background(MaterialTheme.colorScheme.primary))
             }
             Row(
                 modifier = Modifier
@@ -164,10 +164,10 @@ fun WorkoutSetupScreenContent(
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         "Back",
-                        tint = if (step > 1) OnSurface else OnSurface.copy(0.3f)
+                        tint = if (step > 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(0.3f)
                     )
                 }
-                Text("WORKOUT SETUP $step / $totalSteps", style = Typography.labelMedium, color = OnSurfaceVariant)
+                Text("WORKOUT SETUP $step / $totalSteps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.width(48.dp))
             }
         }
@@ -215,8 +215,8 @@ fun WorkoutSetupScreenContent(
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(Background.copy(0.95f))
-                .border(1.dp, OutlineVariant.copy(0.2f))
+                .background(MaterialTheme.colorScheme.background.copy(0.95f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
                 .padding(20.dp)
         ) {
             Button(
@@ -226,7 +226,7 @@ fun WorkoutSetupScreenContent(
                 enabled = canProceed(),
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Text(
                     when (step) {
@@ -234,7 +234,7 @@ fun WorkoutSetupScreenContent(
                         8 -> "Start Training"
                         else -> "Continue"
                     },
-                    style = Typography.headlineMedium.copy(fontSize = 18.sp)
+                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp)
                 )
             }
         }
@@ -309,18 +309,18 @@ private fun BenchmarkStep(
             onClick = onEnableBenchmark,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text("I know my lifts — add benchmarks", style = Typography.labelMedium)
+            Text("I know my lifts — add benchmarks", style = MaterialTheme.typography.labelMedium)
         }
     } else {
         OutlinedButton(
             onClick = onSkip,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = OnSurfaceVariant)
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
         ) {
-            Text("I'm a beginner — skip benchmarks", style = Typography.labelMedium)
+            Text("I'm a beginner — skip benchmarks", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -434,14 +434,14 @@ private fun NotificationsSetupStep(onGranted: () -> Unit) {
         modifier = Modifier.fillMaxWidth().height(52.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Text("Allow Notifications", color = Primary)
+        Text("Allow Notifications", color = MaterialTheme.colorScheme.primary)
     }
     if (permissionRequested) {
         Spacer(Modifier.height(8.dp))
         Text(
             "You can change this later in system settings.",
-            style = Typography.bodySmall,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
@@ -504,12 +504,12 @@ private fun SummaryStep(profile: UserProfile) {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.CheckCircle, null, tint = Secondary, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 "Ready to start your personalized plan",
-                style = Typography.bodyMedium,
-                color = Secondary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
                 textAlign = TextAlign.Center
             )
         }
@@ -534,9 +534,9 @@ private fun SummaryStatGrid(items: List<Pair<String, String>>) {
 
 @Composable
 private fun StepHeader(title: String, subtitle: String) {
-    Text(title, style = Typography.headlineLarge, color = Primary)
+    Text(title, style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(Modifier.height(8.dp))
-    Text(subtitle, style = Typography.bodyMedium, color = OnSurfaceVariant)
+    Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(24.dp))
 }
 

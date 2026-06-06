@@ -2,6 +2,7 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +34,6 @@ import com.example.GymViewModel
 import com.example.data.ExerciseGuideDetail
 import com.example.data.ExerciseStepFormatter
 import com.example.data.GuideSource
-import com.example.ui.theme.*
 
 @Composable
 fun ExerciseTutorialDialog(
@@ -59,6 +59,8 @@ fun ExerciseTutorialDialog(
     val showChange = aiEnabled && guideState is ExerciseGuideUiState.Ready &&
         guideState.guide.source == GuideSource.AI && !guideState.isGeneratingAi
 
+    val cs = MaterialTheme.colorScheme
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true)
@@ -67,8 +69,9 @@ fun ExerciseTutorialDialog(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.88f),
-            shape = RoundedCornerShape(20.dp),
-            color = SurfaceContainer
+            shape = MaterialTheme.shapes.extraLarge,
+            color = cs.surfaceContainerHigh,
+            tonalElevation = 3.dp
         ) {
             Column(Modifier.fillMaxSize()) {
                 TutorialHeader(
@@ -77,7 +80,7 @@ fun ExerciseTutorialDialog(
                     onDismiss = onDismiss
                 )
 
-                HorizontalDivider(color = OutlineVariant.copy(0.25f))
+                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.35f))
 
                 Box(
                     Modifier
@@ -126,13 +129,13 @@ fun ExerciseTutorialDialog(
                             busy = busy,
                             onAiFill = onAiFill
                         ) {
-                            Text(guideState.message, color = Error, textAlign = TextAlign.Center)
+                            Text(guideState.message, color = cs.error, textAlign = TextAlign.Center)
                         }
                         ExerciseGuideUiState.Idle -> Unit
                     }
                 }
 
-                HorizontalDivider(color = OutlineVariant.copy(0.25f))
+                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.35f))
                 TutorialActionBar(
                     guideState = guideState,
                     isOnline = isOnline,
@@ -149,19 +152,20 @@ private fun TutorialHeader(
     guideState: ExerciseGuideUiState,
     onDismiss: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.FitnessCenter, null, tint = Primary)
+        Icon(Icons.Default.FitnessCenter, null, tint = cs.primary)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 exerciseName,
-                style = Typography.titleLarge,
-                color = Primary,
+                style = MaterialTheme.typography.titleLarge,
+                color = cs.onSurface,
                 fontWeight = FontWeight.Bold
             )
             when (guideState) {
@@ -170,18 +174,18 @@ private fun TutorialHeader(
                         GuideSource.API -> guideState.guide.apiName
                         GuideSource.AI -> "AI-generated steps"
                     }
-                    Text(subtitle, style = Typography.bodySmall, color = OnSurfaceVariant)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
                 is ExerciseGuideUiState.NoMatch -> Text(
                     "No online match found",
-                    style = Typography.bodySmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant
                 )
-                else -> Text("Exercise tutorial", style = Typography.bodySmall, color = OnSurfaceVariant)
+                else -> Text("Exercise tutorial", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
         }
         IconButton(onClick = onDismiss) {
-            Icon(Icons.Default.Close, "Close", tint = OnSurface)
+            Icon(Icons.Default.Close, "Close", tint = cs.onSurface)
         }
     }
 }
@@ -201,33 +205,31 @@ private fun StepsSectionHeader(
     ) {
         Text(
             "Steps",
-            style = Typography.titleMedium,
-            color = Primary,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.SemiBold
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (showChange) {
-                Button(
+                FilledTonalButton(
                     onClick = onChangeAiSteps,
                     enabled = !busy,
-                    shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Change", style = Typography.labelMedium)
+                    Text("Change", style = MaterialTheme.typography.labelMedium)
                 }
             }
             if (showAiFill) {
-                Button(
+                FilledTonalButton(
                     onClick = onAiFill,
                     enabled = !busy,
-                    shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("AI Fill", style = Typography.labelMedium)
+                    Text("AI Fill", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -268,30 +270,25 @@ private fun EmptyGuideContent(
 @Composable
 private fun LoadingContent() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Primary)
-            Spacer(Modifier.height(12.dp))
-            Text("Loading tutorial…", color = OnSurfaceVariant)
-        }
+        GymLoadingIndicator(message = "Loading tutorial…")
     }
 }
 
 @Composable
 private fun GeneratingOverlay() {
+    val cs = MaterialTheme.colorScheme
     Box(
         Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(12.dp)),
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            color = SurfaceContainer.copy(alpha = 0.92f),
-            modifier = Modifier.fillMaxSize()
-        ) {}
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = Primary)
-            Spacer(Modifier.height(12.dp))
-            Text("Generating steps with AI…", color = OnSurfaceVariant)
+        ElevatedCard(shape = MaterialTheme.shapes.large) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                GymLoadingIndicator()
+                Spacer(Modifier.height(8.dp))
+                Text("Generating steps…", color = cs.onSurface)
+            }
         }
     }
 }
@@ -306,6 +303,7 @@ private fun ExerciseGuideContent(
     onChangeAiSteps: () -> Unit
 ) {
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     Column(
         Modifier
             .fillMaxSize()
@@ -313,10 +311,10 @@ private fun ExerciseGuideContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         guide.gifModel?.let { model ->
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Background)
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.elevatedCardColors(containerColor = cs.surfaceContainerLowest)
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(context)
@@ -359,22 +357,22 @@ private fun ExerciseGuideContent(
             Row(Modifier.fillMaxWidth()) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = Primary.copy(0.15f),
+                    color = cs.primaryContainer,
                     modifier = Modifier.padding(top = 2.dp)
                 ) {
                     Text(
                         parts.tag,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = Typography.labelMedium,
-                        color = Primary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = cs.onPrimaryContainer,
                         fontWeight = FontWeight.Bold
                     )
                 }
                 Spacer(Modifier.width(10.dp))
                 Text(
                     parts.body,
-                    style = Typography.bodyMedium,
-                    color = OnSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurface,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -386,20 +384,20 @@ private fun ExerciseGuideContent(
                 else "Loaded from ExerciseDB."
                 GuideSource.AI -> "AI-generated — saved locally."
             },
-            style = Typography.labelSmall,
-            color = Secondary
+            style = MaterialTheme.typography.labelSmall,
+            color = cs.secondary
         )
     }
 }
 
 @Composable
 private fun MetaChip(label: String) {
-    Surface(shape = RoundedCornerShape(20.dp), color = SurfaceContainerHigh) {
+    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Text(
             label,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = Typography.labelSmall,
-            color = OnSurfaceVariant
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -410,19 +408,19 @@ private fun NoMatchMessage(exerciseName: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.SearchOff, null, tint = OnSurfaceVariant, modifier = Modifier.size(48.dp))
+        Icon(Icons.Default.SearchOff, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(16.dp))
         Text(
             "No exact match online",
-            style = Typography.titleMedium,
-            color = OnSurface,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "\"$exerciseName\" wasn't found in ExerciseDB. Use AI Fill to generate steps, or Check Online after correcting the name.",
-            style = Typography.bodyMedium,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
     }
@@ -434,19 +432,19 @@ private fun OfflineGuideMessage(exerciseName: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.WifiOff, null, tint = OnSurfaceVariant, modifier = Modifier.size(48.dp))
+        Icon(Icons.Default.WifiOff, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(16.dp))
         Text(
             "Turn on internet",
-            style = Typography.titleMedium,
-            color = OnSurface,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Tutorial for \"$exerciseName\" isn't cached yet. Connect to load GIF and steps from ExerciseDB, or use AI Fill offline.",
-            style = Typography.bodyMedium,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
     }
@@ -458,19 +456,19 @@ private fun RateLimitedGuideMessage() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.Timer, null, tint = OnSurfaceVariant, modifier = Modifier.size(48.dp))
+        Icon(Icons.Default.Timer, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
         Spacer(Modifier.height(16.dp))
         Text(
             "Exercise database is busy",
-            style = Typography.titleMedium,
-            color = OnSurface,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Too many requests right now. Wait a minute and tap Check Online, or use AI Fill to generate steps immediately.",
-            style = Typography.bodyMedium,
-            color = OnSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
     }
@@ -502,7 +500,7 @@ private fun TutorialActionBar(
     ) {
         OutlinedButton(
             onClick = onCheckOnline,
-            shape = RoundedCornerShape(12.dp),
+            shape = MaterialTheme.shapes.large,
             enabled = isOnline && !busy
         ) {
             Icon(Icons.Default.CloudDownload, null, modifier = Modifier.size(18.dp))
