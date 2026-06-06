@@ -77,6 +77,7 @@ class GymApplication : Application(), ImageLoaderFactory {
     val coachHistoryRepository by lazy {
         com.example.data.CoachHistoryRepository(AppDatabase.getDatabase(this).gymDao())
     }
+    val appUpdateManager by lazy { com.example.data.AppUpdateManager(this) }
 
     fun refreshRepositoryAfterRestore() {
         synchronized(this) {

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,7 +52,8 @@ fun ExerciseTutorialDialog(
         (guideState is ExerciseGuideUiState.Ready && guideState.isGeneratingAi)
     val showAiFill = aiEnabled && when (guideState) {
         is ExerciseGuideUiState.Ready -> guideState.guide.source == GuideSource.API && !guideState.isGeneratingAi
-        is ExerciseGuideUiState.NoMatch, is ExerciseGuideUiState.NeedsInternet, is ExerciseGuideUiState.Error -> true
+        is ExerciseGuideUiState.NoMatch, is ExerciseGuideUiState.NeedsInternet,
+        is ExerciseGuideUiState.RateLimited, is ExerciseGuideUiState.Error -> true
         else -> false
     }
     val showChange = aiEnabled && guideState is ExerciseGuideUiState.Ready &&
@@ -111,6 +113,13 @@ fun ExerciseTutorialDialog(
                             onAiFill = onAiFill
                         ) {
                             OfflineGuideMessage(exerciseName)
+                        }
+                        is ExerciseGuideUiState.RateLimited -> EmptyGuideContent(
+                            showAiFill = showAiFill,
+                            busy = busy,
+                            onAiFill = onAiFill
+                        ) {
+                            RateLimitedGuideMessage()
                         }
                         is ExerciseGuideUiState.Error -> EmptyGuideContent(
                             showAiFill = showAiFill,
@@ -444,6 +453,30 @@ private fun OfflineGuideMessage(exerciseName: String) {
 }
 
 @Composable
+private fun RateLimitedGuideMessage() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.Timer, null, tint = OnSurfaceVariant, modifier = Modifier.size(48.dp))
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Exercise database is busy",
+            style = Typography.titleMedium,
+            color = OnSurface,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Too many requests right now. Wait a minute and tap Check Online, or use AI Fill to generate steps immediately.",
+            style = Typography.bodyMedium,
+            color = OnSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 private fun TutorialActionBar(
     guideState: ExerciseGuideUiState,
     isOnline: Boolean,
@@ -451,7 +484,8 @@ private fun TutorialActionBar(
 ) {
     val showCheckOnline = when (guideState) {
         is ExerciseGuideUiState.Ready -> !guideState.isGeneratingAi
-        is ExerciseGuideUiState.NoMatch, is ExerciseGuideUiState.NeedsInternet, is ExerciseGuideUiState.Error -> true
+        is ExerciseGuideUiState.NoMatch, is ExerciseGuideUiState.NeedsInternet,
+        is ExerciseGuideUiState.RateLimited, is ExerciseGuideUiState.Error -> true
         else -> false
     }
     val busy = guideState == ExerciseGuideUiState.Loading ||

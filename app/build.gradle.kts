@@ -14,8 +14,14 @@ android {
     applicationId = "com.aistudio.gymai.qxzpvw"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "1.1.0"
+
+    buildConfigField(
+      "String",
+      "UPDATE_MANIFEST_URL",
+      "\"https://raw.githubusercontent.com/feelthevenom/invincibleAI/main/app/version.json\""
+    )
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

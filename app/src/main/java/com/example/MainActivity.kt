@@ -42,7 +42,8 @@ class MainActivity : FragmentActivity() {
                             app.modelDownloadManager,
                             app.secureStorageManager,
                             app.exerciseGuideRepository,
-                            app.coachHistoryRepository
+                            app.coachHistoryRepository,
+                            app.appUpdateManager
                         )
                     )
 
