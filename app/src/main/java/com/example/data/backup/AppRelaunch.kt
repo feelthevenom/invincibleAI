@@ -9,7 +9,7 @@ import com.example.MainActivity
 object AppRelaunch {
 
     fun afterRestore(context: Context) {
-        (context.applicationContext as GymApplication).refreshRepositoryAfterRestore()
+        (context.applicationContext as GymApplication).invalidateAfterRestore()
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }

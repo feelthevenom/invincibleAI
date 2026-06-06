@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         DailyGoalSnapshot::class, AppNotification::class,
         CachedExerciseGuide::class, CoachChatHistoryEntity::class
     ],
-    version = 22,
+    version = 25,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

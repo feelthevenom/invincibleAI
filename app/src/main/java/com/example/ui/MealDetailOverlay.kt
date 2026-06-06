@@ -59,6 +59,7 @@ private sealed class MealSheetPage {
     data class PlateAnalysis(val bitmap: Bitmap) : MealSheetPage()
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MealDetailOverlay(
     mealType: String,
@@ -76,6 +77,8 @@ fun MealDetailOverlay(
     var isLoadingImage by remember { mutableStateOf(false) }
     var imageLoadError by remember { mutableStateOf<String?>(null) }
     var pendingImageAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     fun openPlateAnalysis(bitmap: Bitmap) {
         scope.launch {
@@ -190,7 +193,9 @@ fun MealDetailOverlay(
             is MealSheetPage.FoodWeight, is MealSheetPage.CustomFood -> MealSheetPage.FoodList
             is MealSheetPage.PlateAnalysis, MealSheetPage.FoodList -> MealSheetPage.Detail
             else -> {
-                onDismiss()
+                scope.launch { sheetState.hide() }.invokeOnCompletion {
+                    if (!sheetState.isVisible) onDismiss()
+                }
                 return@BackHandler
             }
         }
@@ -207,123 +212,110 @@ fun MealDetailOverlay(
         )
     }
 
-    Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        modifier = Modifier.fillMaxHeight(0.95f)
     ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            MealSheetTopBar(
+                page = page,
+                mealType = mealType,
+                onBack = {
+                    page = when (page) {
+                        is MealSheetPage.FoodWeight -> MealSheetPage.FoodList
+                        is MealSheetPage.CustomFood -> MealSheetPage.FoodList
+                        is MealSheetPage.PlateAnalysis -> MealSheetPage.Detail
+                        else -> MealSheetPage.Detail
+                    }
+                },
+                onClose = {
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+                }
+            )
+
+            AnimatedContent(
+                targetState = page,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                transitionSpec = {
+                    slideInHorizontally(tween(300)) { it / 3 } + fadeIn(tween(300)) togetherWith
+                        slideOutHorizontally(tween(300)) { -it / 3 } + fadeOut(tween(300))
+                },
+                label = "meal_page"
+            ) { currentPage ->
+                when (currentPage) {
+                    MealSheetPage.Detail -> MealDetailPage(
+                        budget = budget,
+                        consumedCal = consumedCal,
+                        consumedPro = consumedPro,
+                        consumedCarb = consumedCarb,
+                        consumedFat = consumedFat,
+                        consumedFib = consumedFib,
+                        entries = entries,
+                        onAddClick = {
+                            viewModel.loadFoodSuggestions()
+                            page = MealSheetPage.FoodList
+                        },
+                        onCameraClick = {
+                            requestCameraPermissionThen { cameraLauncher.launch() }
+                        },
+                        onGalleryClick = {
+                            requestGalleryPermissionThen { galleryLauncher.launch("image/*") }
+                        },
+                        viewModel = viewModel
+                    )
+                    MealSheetPage.FoodList -> FoodSearchPage(
+                        searchState = searchState,
+                        customFoods = customFoods,
+                        onQueryChange = viewModel::onFoodSearchQueryChanged,
+                        onCreateCustom = {
+                            page = MealSheetPage.CustomFood(searchState.query.trim())
+                        },
+                        onFoodSelected = { page = MealSheetPage.FoodWeight(it) },
+                        viewModel = viewModel
+                    )
+                    is MealSheetPage.CustomFood -> CustomFoodCreatePage(
+                        viewModel = viewModel,
+                        initialName = currentPage.prefilledName,
+                        onSave = { item: CustomFoodItem ->
+                            viewModel.addCustomFoodAndReturn(item) { food ->
+                                page = MealSheetPage.FoodWeight(food)
+                            }
+                        }
+                    )
+                    is MealSheetPage.FoodWeight -> FoodWeightPage(
+                        food = currentPage.food,
+                        onAdd = { grams: Int ->
+                            viewModel.addFoodToMeal(mealType, currentPage.food, grams, logDayStart)
+                            page = MealSheetPage.Detail
+                        }
+                    )
+                    is MealSheetPage.PlateAnalysis -> PlateAnalysisPage(
+                        bitmap = currentPage.bitmap,
+                        viewModel = viewModel,
+                        mealType = mealType,
+                        logDayStart = logDayStart,
+                        onCompleted = { page = MealSheetPage.Detail },
+                        onCancel = { page = MealSheetPage.Detail }
+                    )
+                }
+            }
+        }
+    }
+
+    if (isLoadingImage) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(0.6f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.BottomCenter
+                .background(Color.Black.copy(0.45f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.88f)
-                    .clickable(enabled = false) {}
-                    .background(Background, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                    .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    MealSheetTopBar(
-                        page = page,
-                        mealType = mealType,
-                        onBack = {
-                            page = when (page) {
-                                is MealSheetPage.FoodWeight -> MealSheetPage.FoodList
-                                is MealSheetPage.CustomFood -> MealSheetPage.FoodList
-                                is MealSheetPage.PlateAnalysis -> MealSheetPage.Detail
-                                else -> MealSheetPage.Detail
-                            }
-                        },
-                        onClose = onDismiss
-                    )
-
-                    AnimatedContent(
-                        targetState = page,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        transitionSpec = {
-                            slideInHorizontally(tween(300)) { it / 3 } + fadeIn(tween(300)) togetherWith
-                                slideOutHorizontally(tween(300)) { -it / 3 } + fadeOut(tween(300))
-                        },
-                        label = "meal_page"
-                    ) { currentPage ->
-                        when (currentPage) {
-                            MealSheetPage.Detail -> MealDetailPage(
-                                budget = budget,
-                                consumedCal = consumedCal,
-                                consumedPro = consumedPro,
-                                consumedCarb = consumedCarb,
-                                consumedFat = consumedFat,
-                                consumedFib = consumedFib,
-                                entries = entries,
-                                onAddClick = {
-                                    viewModel.loadFoodSuggestions()
-                                    page = MealSheetPage.FoodList
-                                },
-                                onCameraClick = {
-                                    requestCameraPermissionThen { cameraLauncher.launch() }
-                                },
-                                onGalleryClick = {
-                                    requestGalleryPermissionThen { galleryLauncher.launch("image/*") }
-                                },
-                                viewModel = viewModel
-                            )
-                            MealSheetPage.FoodList -> FoodSearchPage(
-                                searchState = searchState,
-                                customFoods = customFoods,
-                                onQueryChange = viewModel::onFoodSearchQueryChanged,
-                                onCreateCustom = {
-                                    page = MealSheetPage.CustomFood(searchState.query.trim())
-                                },
-                                onFoodSelected = { page = MealSheetPage.FoodWeight(it) },
-                                viewModel = viewModel
-                            )
-                            is MealSheetPage.CustomFood -> CustomFoodCreatePage(
-                                viewModel = viewModel,
-                                initialName = currentPage.prefilledName,
-                                onSave = { item: CustomFoodItem ->
-                                    viewModel.addCustomFoodAndReturn(item) { food ->
-                                        page = MealSheetPage.FoodWeight(food)
-                                    }
-                                }
-                            )
-                            is MealSheetPage.FoodWeight -> FoodWeightPage(
-                                food = currentPage.food,
-                                onAdd = { grams: Int ->
-                                    viewModel.addFoodToMeal(mealType, currentPage.food, grams, logDayStart)
-                                    page = MealSheetPage.Detail
-                                }
-                            )
-                            is MealSheetPage.PlateAnalysis -> PlateAnalysisPage(
-                                bitmap = currentPage.bitmap,
-                                viewModel = viewModel,
-                                mealType = mealType,
-                                logDayStart = logDayStart,
-                                onCompleted = { page = MealSheetPage.Detail },
-                                onCancel = { page = MealSheetPage.Detail }
-                            )
-                        }
-                    }
-                }
-            }
-            if (isLoadingImage) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(0.45f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Primary)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Loading image…", color = OnSurface)
-                    }
-                }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                GymLoadingIndicator()
+                Spacer(Modifier.height(12.dp))
+                Text("Loading image…", color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -344,7 +336,7 @@ private fun MealSheetTopBar(
     ) {
         if (page !is MealSheetPage.Detail) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnSurface)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
         } else {
             Spacer(modifier = Modifier.width(48.dp))
@@ -357,13 +349,13 @@ private fun MealSheetTopBar(
                 is MealSheetPage.FoodWeight -> page.food.name
                 is MealSheetPage.PlateAnalysis -> "AI Analysis"
             },
-            style = Typography.headlineMedium,
-            color = Primary,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         IconButton(onClick = onClose) {
-            Icon(Icons.Default.Close, "Close", tint = OnSurface)
+            Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -386,34 +378,34 @@ private fun FoodSearchPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
-            placeholder = { Text("Search foods… e.g. idli, sandwich, rice", color = OnSurfaceVariant) },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = Primary) },
+            placeholder = { Text("Search foods… e.g. idli, sandwich, rice", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary) },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Primary,
-                unfocusedBorderColor = OutlineVariant.copy(0.4f),
-                focusedTextColor = OnSurface,
-                unfocusedTextColor = OnSurface
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(0.4f),
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
             )
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "700+ foods · Real-time search · Type to find anything",
-            style = Typography.labelMedium,
-            color = OnSurfaceVariant.copy(0.6f),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
             modifier = Modifier.padding(horizontal = 20.dp)
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         if (searchState.isLoading) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Primary)
+                GymLoadingIndicator()
             }
         }
 
         searchState.error?.let { err ->
-            Text(err, color = Error, style = Typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp))
+            Text(err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
         LazyColumn(
@@ -475,16 +467,12 @@ private fun FoodSearchPage(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            CircularProgressIndicator(
-                                color = Primary,
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
+                            GymLoadingIndicatorSmall(modifier = Modifier.size(24.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 "Searching Open Food Facts…",
-                                style = Typography.bodySmall,
-                                color = OnSurfaceVariant
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -514,7 +502,7 @@ private fun FoodSearchPage(
                 TextButton(onClick = { 
                     foodToDelete?.let { viewModel.deleteCustomFood(it) }
                     foodToDelete = null
-                }) { Text("Delete", color = Error) }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { foodToDelete = null }) { Text("Cancel") }
@@ -527,8 +515,8 @@ private fun FoodSearchPage(
 private fun SectionHeader(text: String) {
     Text(
         text,
-        style = Typography.labelMedium,
-        color = OnSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp)
     )
 }
@@ -574,13 +562,13 @@ private fun CustomFoodCreatePage(
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Enter nutrition per 100g", style = Typography.bodyMedium, color = OnSurfaceVariant)
+            Text("Enter nutrition per 100g", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (viewModel.isAiConfigured()) {
                 TextButton(onClick = { triggerAiAutofill() }, enabled = !isAiLoading && name.isNotBlank()) {
                     if (isAiLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Primary)
+                        GymLoadingIndicatorSmall(modifier = Modifier.size(16.dp))
                     } else {
-                        Text("✨ AI Autofill", color = Primary)
+                        Text("✨ AI Autofill", color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -590,8 +578,8 @@ private fun CustomFoodCreatePage(
         Spacer(modifier = Modifier.height(12.dp))
         
         if (showSuggestions) {
-            Column(modifier = Modifier.fillMaxWidth().background(SurfaceContainerHighest, RoundedCornerShape(12.dp)).padding(8.dp)) {
-                Text("AI Suggestions", style = Typography.labelMedium, color = Primary, modifier = Modifier.padding(bottom = 8.dp))
+            Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(8.dp)) {
+                Text("AI Suggestions", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 8.dp))
                 aiSuggestions.take(4).forEach { suggestion ->
                     Text(
                         "${suggestion.name} (${suggestion.caloriesPer100g} kcal)",
@@ -607,7 +595,7 @@ private fun CustomFoodCreatePage(
                                 showSuggestions = false
                             }
                             .padding(vertical = 8.dp, horizontal = 4.dp),
-                        style = Typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
@@ -640,9 +628,9 @@ private fun CustomFoodCreatePage(
             enabled = name.isNotBlank() && (calories.toIntOrNull() ?: 0) > 0,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
         ) {
-            Text("Save & Continue", style = Typography.headlineMedium.copy(fontSize = 18.sp))
+            Text("Save & Continue", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp))
         }
         Spacer(modifier = Modifier.height(24.dp))
     }
@@ -661,21 +649,21 @@ private fun FoodListItem(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (highlight) Primary.copy(0.1f) else SurfaceContainerHighest.copy(0.3f),
+                if (highlight) MaterialTheme.colorScheme.primary.copy(0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(0.3f),
                 RoundedCornerShape(12.dp)
             )
-            .border(1.dp, if (highlight) Primary.copy(0.3f) else OutlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
+            .border(1.dp, if (highlight) MaterialTheme.colorScheme.primary.copy(0.3f) else MaterialTheme.colorScheme.outlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(name, style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = if (highlight) Primary else OnSurface)
-            Text(subtitle, style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text(name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         IconButton(onClick = { onIconClick?.invoke() ?: onClick() }) {
-            Icon(icon, null, tint = Primary)
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -704,32 +692,32 @@ private fun MealDetailPage(
             .padding(horizontal = 20.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Max ${budget.calories} kcal for this meal", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text("Max ${budget.calories} kcal for this meal", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(16.dp))
             MealProgressHeader(
                 kcal = consumedCal,
                 target = budget.calories,
-                statusColor = if (consumedCal > budget.calories) Error else Secondary
+                statusColor = if (consumedCal > budget.calories) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
             )
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MiniMacroBar("PRO", "${consumedPro}g", Primary, progressRatio(consumedPro, budget.protein), Modifier.weight(1f))
-                MiniMacroBar("CAR", "${consumedCarb}g", Tertiary, progressRatio(consumedCarb, budget.carbs), Modifier.weight(1f))
-                MiniMacroBar("FAT", "${consumedFat}g", Error, progressRatio(consumedFat, budget.fat), Modifier.weight(1f))
-                MiniMacroBar("FIB", "${consumedFib}g", Secondary, progressRatio(consumedFib, budget.fiber), Modifier.weight(1f))
+                MiniMacroBar("PRO", "${consumedPro}g", MaterialTheme.colorScheme.primary, progressRatio(consumedPro, budget.protein), Modifier.weight(1f))
+                MiniMacroBar("CAR", "${consumedCarb}g", MaterialTheme.colorScheme.tertiary, progressRatio(consumedCarb, budget.carbs), Modifier.weight(1f))
+                MiniMacroBar("FAT", "${consumedFat}g", MaterialTheme.colorScheme.error, progressRatio(consumedFat, budget.fat), Modifier.weight(1f))
+                MiniMacroBar("FIB", "${consumedFib}g", MaterialTheme.colorScheme.secondary, progressRatio(consumedFib, budget.fiber), Modifier.weight(1f))
             }
             Spacer(modifier = Modifier.height(24.dp))
-            Text("LOGGED ITEMS", style = Typography.labelMedium, color = OnSurfaceVariant)
+            Text("LOGGED ITEMS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(12.dp))
             if (entries.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp))
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No items yet. Tap Add Item below.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+                    Text("No items yet. Tap Add Item below.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -758,11 +746,11 @@ private fun MealDetailPage(
                 onClick = onAddClick,
                 modifier = Modifier.weight(0.8f).height(56.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Icon(Icons.Default.Add, null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Item", style = Typography.headlineMedium.copy(fontSize = 18.sp))
+                Text("Add Item", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp))
             }
 
             Button(
@@ -770,7 +758,7 @@ private fun MealDetailPage(
                 modifier = Modifier.weight(0.2f).height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(0.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SurfaceContainerHigh, contentColor = Primary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(Icons.Default.CameraAlt, contentDescription = "Camera")
             }
@@ -837,7 +825,7 @@ private fun MealDetailPage(
                 TextButton(onClick = { 
                     entryToDelete?.let { viewModel.deleteMeal(it) }
                     entryToDelete = null
-                }) { Text("Remove", color = Error) }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { entryToDelete = null }) { Text("Cancel") }
@@ -882,16 +870,16 @@ private fun EditMealEntryDialog(entry: MealEntry, onDismiss: () -> Unit, onSave:
                 if (preview != null) {
                     Text(
                         "Calculated for ${preview.weightGrams}g",
-                        style = Typography.labelMedium,
-                        color = Primary
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         "${preview.calories} kcal · P${preview.protein}g · C${preview.carbs}g · F${preview.fat}g · Fiber ${preview.fiber}g",
-                        style = Typography.bodyMedium,
-                        color = OnSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else if (weight.isNotEmpty() && weightInt <= 0) {
-                    Text("Enter a valid weight in grams", color = Error, style = Typography.bodySmall)
+                    Text("Enter a valid weight in grams", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -942,7 +930,7 @@ private fun PlateAnalysisPage(
     if (isAnalyzing) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(color = Primary)
+                GymLoadingIndicator()
                 Spacer(Modifier.height(16.dp))
                 Text(
                     when (visionSlot.provider) {
@@ -950,18 +938,18 @@ private fun PlateAnalysisPage(
                         "groq" -> "Analyzing with Groq…"
                         else -> "Analyzing with Gemini…"
                     },
-                    color = OnSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     } else if (analysisError != null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                Text("Analysis failed", style = Typography.headlineSmall, color = Error)
+                Text("Analysis failed", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
-                Text(analysisError!!, color = OnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(analysisError!!, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
-                Text("${aiStatus.label}: ${aiStatus.detail}", style = Typography.bodySmall, color = OnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("${aiStatus.label}: ${aiStatus.detail}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = onCancel) { Text("Go Back") }
             }
@@ -969,9 +957,9 @@ private fun PlateAnalysisPage(
     } else if (detectedItems.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                Text("No items detected.", style = Typography.headlineSmall, color = OnSurface)
+                Text("No items detected.", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(8.dp))
-                Text("AI couldn't clearly identify food in this image.", color = OnSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("AI couldn't clearly identify food in this image.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = onCancel) { Text("Retake Image") }
             }
@@ -980,19 +968,19 @@ private fun PlateAnalysisPage(
         var finalItems by remember { mutableStateOf(detectedItems.map { it to "100" }) }
 
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-            Text("AI Detected ${finalItems.size} items", style = Typography.headlineSmall, color = Primary)
+            Text("AI Detected ${finalItems.size} items", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
             
             finalItems.forEachIndexed { index, (food, weight) ->
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceContainerHighest.copy(0.3f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(0.3f))
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(food.name, style = Typography.titleMedium, color = OnSurface)
+                            Text(food.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                             IconButton(onClick = { finalItems = finalItems.filterIndexed { i, _ -> i != index } }) {
-                                Icon(Icons.Default.Close, null, tint = Error)
+                                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
                             }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -1011,7 +999,7 @@ private fun PlateAnalysisPage(
                             Spacer(Modifier.width(16.dp))
                             val w = weight.toIntOrNull() ?: 0
                             val n = FoodNutritionCalculator.nutritionForWeight(food, w)
-                            Text("${n.calories} kcal · P${n.protein}g C${n.carbs}g F${n.fat}g", style = Typography.bodySmall, color = OnSurfaceVariant)
+                            Text("${n.calories} kcal · P${n.protein}g C${n.carbs}g F${n.fat}g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -1048,18 +1036,18 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Text("Nutrition per 100g", style = Typography.labelMedium, color = OnSurfaceVariant)
+        Text("Nutrition per 100g", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp))
                 .padding(16.dp)
         ) {
             Text(
                 "${food.caloriesPer100g} kcal · Protein ${food.proteinPer100g}g · Carbs ${food.carbsPer100g}g · Fat ${food.fatPer100g}g · Fiber ${food.fiberPer100g}g",
-                style = Typography.bodyMedium,
-                color = OnSurface
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -1071,13 +1059,13 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
         )
         preview?.let { n ->
             Spacer(modifier = Modifier.height(24.dp))
-            Text("CALCULATED FOR ${gramsInt}g", style = Typography.labelMedium, color = Primary)
+            Text("CALCULATED FOR ${gramsInt}g", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NutrientChip("${n.calories} kcal", Primary)
-                NutrientChip("P ${n.protein}g", Secondary)
-                NutrientChip("C ${n.carbs}g", Tertiary)
-                NutrientChip("F ${n.fat}g", Error)
+                NutrientChip("${n.calories} kcal", MaterialTheme.colorScheme.primary)
+                NutrientChip("P ${n.protein}g", MaterialTheme.colorScheme.secondary)
+                NutrientChip("C ${n.carbs}g", MaterialTheme.colorScheme.tertiary)
+                NutrientChip("F ${n.fat}g", MaterialTheme.colorScheme.error)
             }
         }
         Spacer(modifier = Modifier.height(32.dp))
@@ -1086,9 +1074,9 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
             enabled = gramsInt > 0,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary)
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
         ) {
-            Text("Add to Meal", style = Typography.headlineMedium.copy(fontSize = 18.sp))
+            Text("Add to Meal", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp))
         }
         Spacer(modifier = Modifier.height(24.dp))
     }
@@ -1098,7 +1086,7 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
 private fun NutrientChip(text: String, color: Color) {
     Text(
         text,
-        style = Typography.labelMedium,
+        style = MaterialTheme.typography.labelMedium,
         color = color,
         modifier = Modifier
             .background(color.copy(0.12f), RoundedCornerShape(8.dp))
@@ -1111,24 +1099,24 @@ private fun LoggedFoodRow(entry: MealEntry, onDelete: () -> Unit, onEdit: () -> 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceContainer, RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(10.dp))
             .clickable(onClick = onEdit)
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(entry.foodName, style = Typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
-            Text("${entry.weightGrams}g", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Text(entry.foodName, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
+            Text("${entry.weightGrams}g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.End) {
-                Text("${entry.calories} kcal", style = Typography.bodyMedium, color = Secondary)
-                Text("P${entry.protein} C${entry.carbs} F${entry.fat}", style = Typography.labelMedium, color = OnSurfaceVariant)
+                Text("${entry.calories} kcal", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                Text("P${entry.protein} C${entry.carbs} F${entry.fat}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, null, tint = OnSurfaceVariant.copy(0.4f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -1143,11 +1131,11 @@ private fun MealProgressHeader(kcal: Int, target: Int, statusColor: Color) {
         else -> "Within limit"
     }
     Column {
-        Text("$kcal / $target kcal", style = Typography.headlineMedium, color = OnSurface)
-        Text(status, style = Typography.labelMedium, color = statusColor)
+        Text("$kcal / $target kcal", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(status, style = MaterialTheme.typography.labelMedium, color = statusColor)
     }
     Spacer(modifier = Modifier.height(12.dp))
-    Box(Modifier.fillMaxWidth().height(8.dp).background(OutlineVariant.copy(0.3f), RoundedCornerShape(50))) {
+    Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(0.3f), RoundedCornerShape(50))) {
         Box(Modifier.fillMaxWidth(progressVal).fillMaxHeight().background(statusColor, RoundedCornerShape(50)))
     }
 }

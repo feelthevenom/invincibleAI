@@ -91,10 +91,10 @@ fun WaterTrackingScreen(
                         TextButton(onClick = { showDateMenu = true }) {
                             Text(
                                 if (isToday) "Today" else DietDateUtils.formatDisplayDate(selectedDayStart),
-                                style = Typography.titleMedium,
-                                color = OnSurface
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Icon(Icons.Default.ArrowDropDown, null, tint = OnSurface)
+                            Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurface)
                         }
                         DropdownMenu(expanded = showDateMenu, onDismissRequest = { showDateMenu = false }) {
                             DropdownMenuItem(
@@ -123,18 +123,18 @@ fun WaterTrackingScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnSurface)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 },
                 actions = {
                     IconButton(onClick = { showCalendar = true }) {
-                        Icon(Icons.Default.CalendarMonth, "Calendar", tint = Primary)
+                        Icon(Icons.Default.CalendarMonth, "Calendar", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
-        containerColor = Background
+        containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
             Modifier
@@ -150,13 +150,13 @@ fun WaterTrackingScreen(
             ) {
                 Text(
                     "$glasses of $goalGlasses Glasses",
-                    style = Typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = OnSurface,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
                 IconButton(onClick = { showGoalDialog = true }) {
-                    Icon(Icons.Default.Edit, "Edit goal", tint = Primary)
+                    Icon(Icons.Default.Edit, "Edit goal", tint = MaterialTheme.colorScheme.primary)
                 }
             }
             LinearProgressIndicator(
@@ -166,8 +166,8 @@ fun WaterTrackingScreen(
                     .padding(horizontal = 20.dp)
                     .height(8.dp)
                     .clip(RoundedCornerShape(50)),
-                color = Primary,
-                trackColor = SurfaceContainerHighest
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
 
             Spacer(Modifier.height(24.dp))
@@ -181,9 +181,9 @@ fun WaterTrackingScreen(
                     onClick = { if (canEdit) viewModel.decrementWaterGlass(selectedDayStart) },
                     enabled = canEdit && glasses > 0,
                     modifier = Modifier.size(52.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Primary)
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Remove, null, tint = Background)
+                    Icon(Icons.Default.Remove, null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
                 Spacer(Modifier.width(24.dp))
                 WaterGlassAnimation(progress = progress, modifier = Modifier.size(180.dp))
@@ -192,9 +192,9 @@ fun WaterTrackingScreen(
                     onClick = { if (canEdit) viewModel.incrementWaterGlass(selectedDayStart) },
                     enabled = canEdit,
                     modifier = Modifier.size(52.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Primary)
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Add, null, tint = Background)
+                    Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
             }
 
@@ -204,20 +204,20 @@ fun WaterTrackingScreen(
             ) {
                 Text(
                     "$glasses Glass (${WaterGoalCalculator.ML_PER_GLASS} ml)",
-                    style = Typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = OnSurface
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 motivation?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, style = Typography.bodyLarge, color = Primary, fontWeight = FontWeight.SemiBold)
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
                 if (profile.waterReminderEnabled) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         reminderHintText(profile),
-                        style = Typography.bodySmall,
-                        color = OnSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp)
                     )
@@ -225,7 +225,7 @@ fun WaterTrackingScreen(
             }
 
             Spacer(Modifier.height(24.dp))
-            HorizontalDivider(color = OutlineVariant.copy(0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f))
 
             Row(
                 Modifier
@@ -235,28 +235,28 @@ fun WaterTrackingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Reminder", style = Typography.titleMedium, color = OnSurface)
-                Text("EDIT", style = Typography.labelLarge, color = Primary, fontWeight = FontWeight.Bold)
+                Text("Reminder", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text("EDIT", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
 
-            HorizontalDivider(color = OutlineVariant.copy(0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.3f))
 
             Column(Modifier.padding(20.dp)) {
-                Text("Today's Tip", style = Typography.titleMedium, color = OnSurface, fontWeight = FontWeight.Bold)
+                Text("Today's Tip", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(SurfaceContainer, RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
                         .padding(16.dp),
                     verticalAlignment = Alignment.Top
                 ) {
-                    Icon(Icons.Default.WaterDrop, null, tint = Primary, modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.WaterDrop, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(
                         WaterTips.tipForDay(selectedDayStart),
-                        style = Typography.bodyMedium,
-                        color = OnSurfaceVariant
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -267,8 +267,8 @@ fun WaterTrackingScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Daily Water Intake", style = Typography.titleMedium, color = OnSurface, fontWeight = FontWeight.Bold)
-                    Text("Last 7 days", style = Typography.labelMedium, color = OnSurfaceVariant)
+                    Text("Daily Water Intake", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                    Text("Last 7 days", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(16.dp))
                 WaterWeeklyBarChart(weeklyData = weeklyData, goalGlasses = goalGlasses)
@@ -285,7 +285,8 @@ private fun WaterGlassAnimation(progress: Float, modifier: Modifier = Modifier) 
         animationSpec = tween(600),
         label = "waterFill"
     )
-    Box(modifier.clip(CircleShape).background(SurfaceContainerHigh), contentAlignment = Alignment.Center) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    Box(modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
@@ -299,16 +300,16 @@ private fun WaterGlassAnimation(progress: Float, modifier: Modifier = Modifier) 
                     close()
                 }
                 clipPath(Path().apply { addOval(androidx.compose.ui.geometry.Rect(0f, 0f, w, h)) }) {
-                    drawPath(wavePath, Primary.copy(alpha = 0.55f))
+                    drawPath(wavePath, primaryColor.copy(alpha = 0.55f))
                     drawRect(
-                        Primary.copy(alpha = 0.35f),
+                        primaryColor.copy(alpha = 0.35f),
                         topLeft = Offset(0f, h - fillH),
                         size = Size(w, fillH)
                     )
                 }
             }
         }
-        Icon(Icons.Default.LocalDrink, null, tint = OnSurface.copy(0.85f), modifier = Modifier.size(48.dp))
+        Icon(Icons.Default.LocalDrink, null, tint = MaterialTheme.colorScheme.onSurface.copy(0.85f), modifier = Modifier.size(48.dp))
     }
 }
 
@@ -329,8 +330,8 @@ fun WaterWeeklyBarChart(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                     Text(
                         if (glasses > 0) "$glasses" else "",
-                        style = Typography.labelSmall,
-                        color = OnSurface,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 10.sp
                     )
                     Spacer(Modifier.height(4.dp))
@@ -340,15 +341,15 @@ fun WaterWeeklyBarChart(
                             .width(18.dp)
                             .height((100 * barFraction).coerceAtLeast(if (glasses > 0) 8f else 0f).dp)
                             .background(
-                                if (DietDateUtils.isToday(dayStart)) Primary else Primary.copy(0.35f),
+                                if (DietDateUtils.isToday(dayStart)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(0.35f),
                                 RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
                             )
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         DietDateUtils.dayOfMonth(dayStart).toString(),
-                        style = Typography.labelSmall,
-                        color = OnSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.sp
                     )
                 }
@@ -359,8 +360,8 @@ fun WaterWeeklyBarChart(
             weeklyData.forEach { (dayStart, _) ->
                 Text(
                     DietDateUtils.formatShortDay(dayStart).substringBefore(" "),
-                    style = Typography.labelSmall,
-                    color = OnSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center
@@ -370,9 +371,9 @@ fun WaterWeeklyBarChart(
         if (goalGlasses > 0) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(24.dp).height(2.dp).background(Tertiary))
+                Box(Modifier.width(24.dp).height(2.dp).background(MaterialTheme.colorScheme.tertiary))
                 Spacer(Modifier.width(8.dp))
-                Text("Goal: $goalGlasses glasses", style = Typography.labelSmall, color = Tertiary)
+                Text("Goal: $goalGlasses glasses", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             }
         }
     }
@@ -396,23 +397,23 @@ fun WaterGoalGlassesDialog(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Suggested: $suggestedGlasses glasses based on your weight",
-                    style = Typography.bodySmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     FilledIconButton(
                         onClick = { if (glasses > 4) glasses-- },
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = SurfaceContainerHigh)
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) { Icon(Icons.Default.Remove, null) }
-                    Text("$glasses", style = Typography.displaySmall, color = OnSurface)
+                    Text("$glasses", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onSurface)
                     FilledIconButton(
                         onClick = { if (glasses < 20) glasses++ },
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Primary)
-                    ) { Icon(Icons.Default.Add, null, tint = Background) }
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) }
                 }
-                Text("glasses (${glasses * WaterGoalCalculator.ML_PER_GLASS} ml)", style = Typography.bodySmall, color = OnSurfaceVariant)
-                warning?.let { Text(it, color = Error, style = Typography.bodySmall) }
+                Text("glasses (${glasses * WaterGoalCalculator.ML_PER_GLASS} ml)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                warning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {

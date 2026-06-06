@@ -222,15 +222,43 @@ fun WorkoutTabContent(
             )
         } else {
             suggestedRoutine?.let { suggestion ->
-                SuggestedWorkoutCard(
-                    suggestion = suggestion,
-                    onStart = { viewModel?.startRoutineWorkout(suggestion.routine, selectedDayStart) },
-                    onSetReminder = onOpenWorkoutReminder
-                )
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Spacer(Modifier.width(8.dp))
+                            Text("SUGGESTED WORKOUT", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        Text(suggestion.routine.name, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                        Text(suggestion.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.8f))
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel?.startRoutineWorkout(suggestion.routine, selectedDayStart) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+                            ) {
+                                Text("Start Now")
+                            }
+                            OutlinedButton(
+                                onClick = onOpenWorkoutReminder,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimaryContainer.copy(0.3f))
+                            ) {
+                                Text("Remind Me")
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
-            Text("Routines", style = Typography.titleMedium, color = OnSurface)
+            Text("ROUTINES", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
 
             RoutineDropdown(
                 routines = routines,
@@ -239,46 +267,32 @@ fun WorkoutTabContent(
                 onEdit = { editingRoutine = it }
             )
 
-            Button(
-                onClick = { selectedRoutine?.let { viewModel?.startRoutineWorkout(it, selectedDayStart) } },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                enabled = selectedRoutine != null && viewModel != null
-            ) {
-                Text("Start Routine", style = Typography.labelMedium)
-            }
-
-            Button(
-                onClick = { viewModel?.startEmptyWorkout(selectedDayStart) },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SurfaceContainerHigh,
-                    contentColor = Primary
-                ),
-                enabled = viewModel != null
-            ) {
-                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Start Empty Workout", style = Typography.labelMedium)
-            }
-
-            OutlinedButton(
-                onClick = { showCreateRoutine = true },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                enabled = viewModel != null
-            ) {
-                Icon(Icons.Default.Create, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("New Routine", style = Typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { selectedRoutine?.let { viewModel?.startRoutineWorkout(it, selectedDayStart) } },
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    enabled = selectedRoutine != null && viewModel != null
+                ) {
+                    Text("Start Routine")
+                }
+                
+                FilledTonalButton(
+                    onClick = { showCreateRoutine = true },
+                    modifier = Modifier.weight(0.7f).height(56.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("New")
+                }
             }
 
             if (dayWorkoutLogs.isNotEmpty()) {
                 Text(
-                    if (DietDateUtils.isToday(selectedDayStart)) "Today's Workout" else "Workout Log",
-                    style = Typography.titleMedium,
-                    color = OnSurface,
+                    "LOGGED SESSIONS",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 dayWorkoutLogs.forEach { log ->
@@ -346,16 +360,17 @@ private fun RoutineDropdown(
             readOnly = true,
             modifier = Modifier.menuAnchor().fillMaxWidth(),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Primary,
-                unfocusedBorderColor = OutlineVariant.copy(0.4f)
-            )
+            shape = MaterialTheme.shapes.medium,
+            colors = m3OutlinedTextFieldColors()
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        ) {
             if (routines.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("No routines yet", color = OnSurfaceVariant) },
+                    text = { Text("No routines yet", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     onClick = { expanded = false },
                     enabled = false
                 )
@@ -364,9 +379,9 @@ private fun RoutineDropdown(
                     DropdownMenuItem(
                         text = {
                             Column {
-                                Text(routine.name, fontWeight = FontWeight.Medium)
+                                Text(routine.name, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                                 if (routine.isBuiltIn) {
-                                    Text("Built-in", style = Typography.labelSmall, color = OnSurfaceVariant)
+                                    Text("Built-in", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         },
@@ -376,7 +391,7 @@ private fun RoutineDropdown(
                         },
                         trailingIcon = {
                             IconButton(onClick = { onEdit(routine); expanded = false }) {
-                                Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = OnSurfaceVariant)
+                                Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     )
@@ -466,11 +481,11 @@ private fun ActiveWorkoutScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Primary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Column {
-                    Text(session.routineName, style = Typography.headlineMedium, color = OnSurface)
-                    Text("Active workout", style = Typography.bodySmall, color = Primary)
+                    Text(session.routineName, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Active workout", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -519,22 +534,18 @@ private fun ActiveWorkoutScreen(
             if (exerciseGroups.isEmpty()) {
                 Text(
                     "No exercises yet. Add your first exercise below.",
-                    style = Typography.bodyMedium,
-                    color = OnSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
             }
 
-            Button(
+            FilledTonalButton(
                 onClick = onShowExerciseSearch,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SurfaceContainerHigh,
-                    contentColor = Primary
-                )
+                shape = MaterialTheme.shapes.large
             ) {
-                Text("+ ADD EXERCISE", style = Typography.labelMedium)
+                Text("Add Exercise", style = MaterialTheme.typography.labelLarge)
             }
         }
 
@@ -546,10 +557,9 @@ private fun ActiveWorkoutScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 16.dp)
                     .height(56.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                shape = MaterialTheme.shapes.extraLarge
             ) {
-                Text("Finish Workout", style = Typography.labelLarge, color = OnPrimary)
+                Text("Finish Workout", style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -575,89 +585,77 @@ private fun DayWorkoutLogCard(
     val matchedRoutine = log.routineId?.let { id -> routines.find { it.id == id } }
         ?: routines.find { it.name.equals(log.routineName, ignoreCase = true) }
     val exercisePreview = log.exerciseGroups.take(3).joinToString(", ") { it.exerciseName }
-    val borderColor = if (log.isFullyCompleted) Secondary else OutlineVariant.copy(0.3f)
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete Workout?") },
-            text = {
-                Text("Remove \"${log.routineName}\" and all logged sets for this day? This cannot be undone.")
-            },
+            text = { Text("Remove \"${log.routineName}\" and all logged sets for this day?") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDelete()
-                    }
-                ) {
-                    Text("Delete", color = Error)
+                TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
             }
         )
     }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
-            .border(
-                width = if (log.isFullyCompleted) 2.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(log.routineName, style = Typography.titleMedium, color = OnSurface, modifier = Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (log.isFullyCompleted) {
-                    Icon(Icons.Default.CheckCircle, null, tint = Secondary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                }
-                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Delete, "Delete workout", tint = Error.copy(0.85f), modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-        Text(
-            "${log.exerciseGroups.size} exercises · ${log.completedSets}/${log.totalSets} sets",
-            style = Typography.bodySmall,
-            color = OnSurfaceVariant
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (log.isFullyCompleted) MaterialTheme.colorScheme.secondaryContainer.copy(0.3f) 
+                             else MaterialTheme.colorScheme.surfaceContainerHigh
         )
-        if (exercisePreview.isNotBlank()) {
-            Text(
-                exercisePreview + if (log.exerciseGroups.size > 3) "…" else "",
-                style = Typography.labelMedium,
-                color = OnSurfaceVariant.copy(0.7f)
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onContinue,
-                modifier = Modifier.weight(1f).height(44.dp),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(if (log.isFullyCompleted) "View Workout" else "Continue Workout")
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (log.isFullyCompleted) {
+                        Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(log.routineName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                }
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error.copy(0.6f), modifier = Modifier.size(20.dp))
+                }
             }
-            if (matchedRoutine != null) {
-                OutlinedButton(
-                    onClick = { onEditRoutine(matchedRoutine) },
-                    modifier = Modifier.weight(1f).height(44.dp),
+            
+            Text(
+                "${log.exerciseGroups.size} exercises · ${log.completedSets}/${log.totalSets} sets",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            if (exercisePreview.isNotBlank()) {
+                Text(
+                    exercisePreview + if (log.exerciseGroups.size > 3) "…" else "",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f)
+                )
+            }
+            
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onContinue,
+                    modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Edit")
+                    Text(if (log.isFullyCompleted) "View Log" else "Continue")
+                }
+                if (matchedRoutine != null) {
+                    OutlinedButton(
+                        onClick = { onEditRoutine(matchedRoutine) },
+                        modifier = Modifier.weight(0.6f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Edit")
+                    }
                 }
             }
         }
@@ -670,48 +668,14 @@ private fun DateTabsRow(
     onTab: (WorkoutDateTab) -> Unit,
     onCalendar: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(SurfaceContainerLow, RoundedCornerShape(12.dp))
-            .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(12.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        listOf(WorkoutDateTab.Yesterday to "Yesterday", WorkoutDateTab.Today to "Today").forEach { (tab, label) ->
-            val selected = dateTab == tab
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) PrimaryContainer else Color.Transparent)
-                    .clickable { onTab(tab) }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    label,
-                    style = Typography.bodyMedium.copy(
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-                    ),
-                    color = if (selected) OnPrimaryContainer else OnSurfaceVariant.copy(0.6f)
-                )
-            }
-        }
-        IconButton(
-            onClick = onCalendar,
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (dateTab == WorkoutDateTab.Calendar) PrimaryContainer else Color.Transparent)
-        ) {
-            Icon(
-                Icons.Default.CalendarMonth,
-                contentDescription = "Calendar",
-                tint = if (dateTab == WorkoutDateTab.Calendar) OnPrimaryContainer else OnSurfaceVariant.copy(0.6f)
-            )
-        }
-    }
+    DateNavigationTabs(
+        yesterdaySelected = dateTab == WorkoutDateTab.Yesterday,
+        todaySelected = dateTab == WorkoutDateTab.Today,
+        calendarSelected = dateTab == WorkoutDateTab.Calendar,
+        onYesterday = { onTab(WorkoutDateTab.Yesterday) },
+        onToday = { onTab(WorkoutDateTab.Today) },
+        onCalendar = onCalendar
+    )
 }
 
 @Composable
@@ -734,13 +698,13 @@ fun WorkoutExerciseCard(
     var showRemoveConfirm by remember { mutableStateOf(false) }
     var showSwitchConfirm by remember { mutableStateOf(false) }
 
-    val borderColor = if (group.allCompleted) Secondary else OutlineVariant.copy(0.3f)
+    val borderColor = if (group.allCompleted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(0.3f)
     val borderWidth = if (group.allCompleted) 2.dp else 1.dp
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
             .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
     ) {
         Row(
@@ -752,23 +716,23 @@ fun WorkoutExerciseCard(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         group.exerciseName,
-                        style = Typography.headlineMedium.copy(fontSize = 18.sp),
-                        color = Primary,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp),
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable(onClick = onExerciseNameClick)
                     )
                     if (maxWeightKg > 0f) {
                         Text(
                             "Max ${formatWeightDisplay(maxWeightKg)} kg",
-                            style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Secondary
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
                 Box(
-                    Modifier.background(SurfaceContainerHighest, RoundedCornerShape(4.dp))
+                    Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
-                    Text(group.exerciseType.uppercase(), style = Typography.labelMedium.copy(fontSize = 10.sp), color = OnSurfaceVariant)
+                    Text(group.exerciseType.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row {
@@ -777,7 +741,7 @@ fun WorkoutExerciseCard(
                 }
                 Box {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreHoriz, null, tint = OnSurfaceVariant.copy(0.4f))
+                        Icon(Icons.Default.MoreHoriz, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f))
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
@@ -789,15 +753,15 @@ fun WorkoutExerciseCard(
                             leadingIcon = { Icon(Icons.Default.Timer, null) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Weights", color = Primary) },
+                            text = { Text("Weights", color = MaterialTheme.colorScheme.primary) },
                             onClick = { showMenu = false },
-                            leadingIcon = { Icon(Icons.Default.CheckCircle, null, tint = Primary) },
+                            leadingIcon = { Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) },
                             enabled = false
                         )
                         DropdownMenuItem(
-                            text = { Text("Remove", color = Error) },
+                            text = { Text("Remove", color = MaterialTheme.colorScheme.error) },
                             onClick = { showMenu = false; showRemoveConfirm = true },
-                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = Error) }
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) }
                         )
                     }
                 }
@@ -862,7 +826,7 @@ fun WorkoutExerciseCard(
                 TextButton(onClick = {
                     showRemoveConfirm = false
                     onRemoveExercise()
-                }) { Text("Remove", color = Error) }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showRemoveConfirm = false }) { Text("Cancel") }
@@ -886,8 +850,8 @@ fun WorkoutExerciseCard(
 private fun RowScope.HeaderCell(text: String, columnWeight: Float) {
     Text(
         text,
-        style = Typography.labelMedium.copy(fontSize = 10.sp),
-        color = OnSurfaceVariant.copy(0.6f),
+        style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
         modifier = Modifier.weight(columnWeight),
         textAlign = TextAlign.Center
     )
@@ -913,13 +877,13 @@ fun WorkoutSetRow(
     ) {
         if (isEditing) {
             IconButton(onClick = onRemoveSet, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Close, null, tint = Error, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
             }
         }
         Text(
             "${set.setNumber}",
-            style = Typography.displayMedium.copy(fontSize = 14.sp),
-            color = OnSurfaceVariant.copy(0.4f),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(if (hideWeight) 0.7f else 0.5f),
             textAlign = TextAlign.Center
         )
@@ -949,16 +913,16 @@ fun WorkoutSetRow(
             )
         } else {
             if (!hideWeight) {
-                StaticSetCell(formatWeightDisplay(set.weight).ifEmpty { "—" }, Modifier.weight(1f), PrimaryFixed)
+                StaticSetCell(formatWeightDisplay(set.weight).ifEmpty { "—" }, Modifier.weight(1f), MaterialTheme.colorScheme.onSurface)
             }
-            StaticSetCell(set.reps.toString(), Modifier.weight(if (hideWeight) 1.3f else 1f), OnSurface)
+            StaticSetCell(set.reps.toString(), Modifier.weight(if (hideWeight) 1.3f else 1f), MaterialTheme.colorScheme.onSurface)
         }
         Box(Modifier.weight(0.5f), contentAlignment = Alignment.Center) {
             Box(
                 Modifier
                     .size(40.dp)
                     .background(
-                        if (set.isCompleted) Secondary else SurfaceContainerHighest,
+                        if (set.isCompleted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceContainerHighest,
                         RoundedCornerShape(8.dp)
                     )
                     .clickable(onClick = onToggleDone),
@@ -967,7 +931,7 @@ fun WorkoutSetRow(
                 Icon(
                     Icons.Default.Check,
                     null,
-                    tint = if (set.isCompleted) OnSecondary else OnSurfaceVariant.copy(0.2f)
+                    tint = if (set.isCompleted) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.2f)
                 )
             }
         }
@@ -977,7 +941,7 @@ fun WorkoutSetRow(
 @Composable
 private fun StaticSetCell(text: String, modifier: Modifier, color: Color) {
     Box(modifier.padding(horizontal = 4.dp).height(40.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = Typography.displayMedium.copy(fontSize = 16.sp), color = color)
+        Text(text, style = MaterialTheme.typography.displayMedium.copy(fontSize = 16.sp), color = color)
     }
 }
 
@@ -990,20 +954,20 @@ private fun EditableSetField(
 ) {
     Box(
         modifier.padding(horizontal = 4.dp).height(40.dp)
-            .background(SurfaceContainerLow, RoundedCornerShape(8.dp)),
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center
     ) {
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = Typography.displayMedium.copy(
+            textStyle = MaterialTheme.typography.displayMedium.copy(
                 fontSize = 16.sp,
-                color = PrimaryFixed,
+                color = MaterialTheme.colorScheme.primaryContainer,
                 textAlign = TextAlign.Center
             ),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            cursorBrush = SolidColor(Primary),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
         )
     }

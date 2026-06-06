@@ -5,11 +5,11 @@ import android.net.Uri
 import com.example.data.AppDatabase
 import com.example.data.ProgressPhoto
 import com.example.data.UserProfile
+import com.example.data.WorkoutSetupProgress
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -53,6 +53,12 @@ object BackupRestoreManager {
         val dir = File(context.filesDir, "progress_photos")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    private fun deleteDatabaseFiles(dbFile: File) {
+        listOf("", "-wal", "-shm", "-journal").forEach { suffix ->
+            File(dbFile.path + suffix).takeIf { it.exists() }?.delete()
+        }
     }
 
     suspend fun exportBackup(
@@ -153,8 +159,15 @@ object BackupRestoreManager {
 
             val dbFile = context.getDatabasePath("gym_database")
             dbFile.parentFile?.mkdirs()
+            deleteDatabaseFiles(dbFile)
+
             val photosDir = progressPhotosDir(context)
             photosDir.listFiles()?.forEach { it.delete() }
+
+            val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+            val settingsAdapter = moshi.adapter(BackupSettings::class.java)
+            var settingsProfile: UserProfile? = null
+            var wroteDatabase = false
 
             context.contentResolver.openInputStream(inputUri)?.use { rawIn ->
                 ZipInputStream(BufferedInputStream(rawIn)).use { zip ->
@@ -163,6 +176,11 @@ object BackupRestoreManager {
                         when {
                             entry.name == DB_ZIP_PATH -> {
                                 FileOutputStream(dbFile).use { out -> zip.copyTo(out) }
+                                wroteDatabase = true
+                            }
+                            entry.name == SETTINGS_FILE -> {
+                                val json = zip.readBytes().decodeToString()
+                                settingsProfile = settingsAdapter.fromJson(json)?.userProfile
                             }
                             entry.name.startsWith(PHOTOS_ZIP_DIR) && !entry.isDirectory -> {
                                 val name = entry.name.removePrefix(PHOTOS_ZIP_DIR)
@@ -177,18 +195,40 @@ object BackupRestoreManager {
                 }
             } ?: return@runCatching BackupResult.Error("Cannot read backup file")
 
-            AppDatabase.getDatabase(context)
-            (context.applicationContext as com.example.GymApplication).refreshRepositoryAfterRestore()
-            runBlocking {
-                val dao = AppDatabase.getDatabase(context).gymDao()
-                val profile = dao.getUserProfile().first()
-                if (profile != null) {
-                    dao.insertOrUpdateProfile(com.example.data.WorkoutSetupProgress.profileAfterRestore(profile))
-                }
+            if (!wroteDatabase || !dbFile.exists() || dbFile.length() == 0L) {
+                return@runCatching BackupResult.Error("Backup database file is missing or empty")
             }
+
+            File(dbFile.path + "-wal").takeIf { it.exists() }?.delete()
+            File(dbFile.path + "-shm").takeIf { it.exists() }?.delete()
+            File(dbFile.path + "-journal").takeIf { it.exists() }?.delete()
+
+            (context.applicationContext as com.example.GymApplication).invalidateAfterRestore()
+
+            val dao = AppDatabase.getDatabase(context).gymDao()
+            val dbProfile = dao.getUserProfile().first()
+            val merged = when {
+                settingsProfile != null ->
+                    WorkoutSetupProgress.mergeWithSettingsBackup(dbProfile, settingsProfile!!)
+                dbProfile != null ->
+                    WorkoutSetupProgress.profileAfterRestore(dbProfile)
+                else -> null
+            }
+            merged?.let { dao.insertOrUpdateProfile(it) }
+
+            val finalProfile = dao.getUserProfile().first()
+            if (finalProfile == null || !WorkoutSetupProgress.looksOnboarded(finalProfile)) {
+                return@runCatching BackupResult.Error(
+                    "Restore finished but no user profile was found in the backup. Try exporting a new backup from a device that has your data."
+                )
+            }
+
             BackupResult.Success
         }.getOrElse {
-            AppDatabase.getDatabase(context)
+            try {
+                (context.applicationContext as com.example.GymApplication).invalidateAfterRestore()
+            } catch (_: Exception) {
+            }
             BackupResult.Error(it.message ?: "Import failed")
         }
     }

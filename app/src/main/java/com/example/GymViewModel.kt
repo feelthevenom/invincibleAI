@@ -36,7 +36,10 @@ import com.example.data.WorkoutStatsCalculator
 import com.example.data.api.OpenFoodFactsRepository
 import android.net.Uri
 import com.example.data.AiStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -169,7 +172,14 @@ class GymViewModel(
     }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfile())
 
+    private val _initialProfileLoaded = MutableStateFlow(false)
+    val initialProfileLoaded: StateFlow<Boolean> = _initialProfileLoaded.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            repository.userProfile.first()
+            _initialProfileLoaded.value = true
+        }
         viewModelScope.launch {
             repository.userProfile.collect { stored ->
                 val db = stored ?: return@collect
@@ -274,6 +284,11 @@ class GymViewModel(
     fun saveProfile(profile: UserProfile) {
         _aiConfigOverlay.value = profile.toAiConfigOverlay()
         viewModelScope.launch { repository.saveProfile(profile) }
+    }
+
+    fun updateThemeMode(mode: String) {
+        val current = userProfile.value
+        saveProfile(current.copy(themeMode = mode))
     }
 
     private fun applyAiProviderChange(current: UserProfile, provider: String): UserProfile {
@@ -632,82 +647,159 @@ class GymViewModel(
 
     private val _exerciseGuideState = MutableStateFlow<ExerciseGuideUiState>(ExerciseGuideUiState.Idle)
     val exerciseGuideState: StateFlow<ExerciseGuideUiState> = _exerciseGuideState.asStateFlow()
+    private var exerciseGuideJob: Job? = null
+    private val exerciseGuideRequestId = AtomicInteger(0)
+
+    private fun applyExerciseGuideResult(requestId: Int, block: () -> Unit) {
+        if (requestId == exerciseGuideRequestId.get()) block()
+    }
 
     fun loadExerciseGuide(exerciseName: String) {
-        viewModelScope.launch {
-            _exerciseGuideState.value = ExerciseGuideUiState.Loading
-            when (val result = exerciseGuideRepository.loadGuide(exerciseName)) {
-                is com.example.data.ExerciseGuideResult.Success ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
-                com.example.data.ExerciseGuideResult.OfflineNoCache ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
-                com.example.data.ExerciseGuideResult.NoOnlineMatch ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
-                com.example.data.ExerciseGuideResult.RateLimited ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.RateLimited(exerciseName)
-                is com.example.data.ExerciseGuideResult.Error ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.Error(result.message)
+        val requestId = exerciseGuideRequestId.incrementAndGet()
+        exerciseGuideJob?.cancel()
+        exerciseGuideJob = viewModelScope.launch {
+            applyExerciseGuideResult(requestId) {
+                _exerciseGuideState.value = ExerciseGuideUiState.Loading
+            }
+            try {
+                when (val result = exerciseGuideRepository.loadGuide(exerciseName)) {
+                    is com.example.data.ExerciseGuideResult.Success ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
+                        }
+                    com.example.data.ExerciseGuideResult.OfflineNoCache ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
+                        }
+                    com.example.data.ExerciseGuideResult.NoOnlineMatch ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
+                        }
+                    com.example.data.ExerciseGuideResult.RateLimited ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.RateLimited(exerciseName)
+                        }
+                    is com.example.data.ExerciseGuideResult.Error ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.Error(result.message)
+                        }
+                }
+            } catch (e: CancellationException) {
+                return@launch
+            } catch (e: Exception) {
+                applyExerciseGuideResult(requestId) {
+                    _exerciseGuideState.value = ExerciseGuideUiState.Error(
+                        e.message ?: "Failed to load exercise tutorial."
+                    )
+                }
             }
         }
     }
 
     fun fetchExerciseGuideOnline(exerciseName: String) {
-        viewModelScope.launch {
+        val requestId = exerciseGuideRequestId.incrementAndGet()
+        exerciseGuideJob?.cancel()
+        exerciseGuideJob = viewModelScope.launch {
             val previous = _exerciseGuideState.value
-            _exerciseGuideState.value = ExerciseGuideUiState.Loading
-            when (val result = exerciseGuideRepository.loadGuide(exerciseName, forceOnline = true)) {
-                is com.example.data.ExerciseGuideResult.Success ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
-                com.example.data.ExerciseGuideResult.OfflineNoCache ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
-                com.example.data.ExerciseGuideResult.NoOnlineMatch ->
-                    _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
-                com.example.data.ExerciseGuideResult.RateLimited ->
+            applyExerciseGuideResult(requestId) {
+                _exerciseGuideState.value = ExerciseGuideUiState.Loading
+            }
+            try {
+                when (val result = exerciseGuideRepository.loadGuide(exerciseName, forceOnline = true)) {
+                    is com.example.data.ExerciseGuideResult.Success ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
+                        }
+                    com.example.data.ExerciseGuideResult.OfflineNoCache ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
+                        }
+                    com.example.data.ExerciseGuideResult.NoOnlineMatch ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
+                        }
+                    com.example.data.ExerciseGuideResult.RateLimited ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
+                            else ExerciseGuideUiState.RateLimited(exerciseName)
+                        }
+                    is com.example.data.ExerciseGuideResult.Error ->
+                        applyExerciseGuideResult(requestId) {
+                            _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
+                            else ExerciseGuideUiState.Error(result.message)
+                        }
+                }
+            } catch (e: CancellationException) {
+                return@launch
+            } catch (e: Exception) {
+                applyExerciseGuideResult(requestId) {
                     _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
-                    else ExerciseGuideUiState.RateLimited(exerciseName)
-                is com.example.data.ExerciseGuideResult.Error ->
-                    _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
-                    else ExerciseGuideUiState.Error(result.message)
+                    else ExerciseGuideUiState.Error(e.message ?: "Failed to load exercise tutorial.")
+                }
             }
         }
     }
 
     fun fillExerciseGuideFromAi(exerciseName: String, replaceExisting: Boolean = true) {
-        viewModelScope.launch {
+        val requestId = exerciseGuideRequestId.incrementAndGet()
+        exerciseGuideJob?.cancel()
+        exerciseGuideJob = viewModelScope.launch {
             if (!isAiConfigured()) {
-                _exerciseGuideState.value = ExerciseGuideUiState.Error(
-                    "Configure AI in Settings to generate steps."
-                )
-                return@launch
-            }
-            val current = _exerciseGuideState.value
-            if (current is ExerciseGuideUiState.Ready && replaceExisting) {
-                _exerciseGuideState.value = current.copy(isGeneratingAi = true)
-            } else if (current !is ExerciseGuideUiState.Ready) {
-                _exerciseGuideState.value = ExerciseGuideUiState.Loading
-            }
-
-            val slot = AiRouteResolver.textSlot(userProfile.value)
-            val reply = aiManager.generateExerciseSteps(
-                exerciseName = exerciseName,
-                provider = slot.provider,
-                modelId = slot.modelId,
-                offlineModelId = slot.offlineModelId
-            )
-            val steps = reply?.let { com.example.data.ExerciseStepFormatter.parseAiSteps(it) }.orEmpty()
-            if (steps.isEmpty()) {
-                _exerciseGuideState.value = when (current) {
-                    is ExerciseGuideUiState.Ready -> current.copy(isGeneratingAi = false)
-                    else -> ExerciseGuideUiState.Error("Couldn't generate steps. Try again or check AI Settings.")
+                applyExerciseGuideResult(requestId) {
+                    _exerciseGuideState.value = ExerciseGuideUiState.Error(
+                        "Configure AI in Settings to generate steps."
+                    )
                 }
                 return@launch
             }
-            val guide = exerciseGuideRepository.saveAiGuide(exerciseName, steps)
-            _exerciseGuideState.value = ExerciseGuideUiState.Ready(guide, isGeneratingAi = false)
+            val current = _exerciseGuideState.value
+            applyExerciseGuideResult(requestId) {
+                if (current is ExerciseGuideUiState.Ready && replaceExisting) {
+                    _exerciseGuideState.value = current.copy(isGeneratingAi = true)
+                } else if (current !is ExerciseGuideUiState.Ready) {
+                    _exerciseGuideState.value = ExerciseGuideUiState.Loading
+                }
+            }
+
+            try {
+                val slot = AiRouteResolver.textSlot(userProfile.value)
+                val reply = aiManager.generateExerciseSteps(
+                    exerciseName = exerciseName,
+                    provider = slot.provider,
+                    modelId = slot.modelId,
+                    offlineModelId = slot.offlineModelId
+                )
+                val steps = reply?.let { com.example.data.ExerciseStepFormatter.parseAiSteps(it) }.orEmpty()
+                if (steps.isEmpty()) {
+                    applyExerciseGuideResult(requestId) {
+                        _exerciseGuideState.value = when (current) {
+                            is ExerciseGuideUiState.Ready -> current.copy(isGeneratingAi = false)
+                            else -> ExerciseGuideUiState.Error("Couldn't generate steps. Try again or check AI Settings.")
+                        }
+                    }
+                    return@launch
+                }
+                val guide = exerciseGuideRepository.saveAiGuide(exerciseName, steps)
+                applyExerciseGuideResult(requestId) {
+                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(guide, isGeneratingAi = false)
+                }
+            } catch (e: CancellationException) {
+                return@launch
+            } catch (e: Exception) {
+                applyExerciseGuideResult(requestId) {
+                    _exerciseGuideState.value = when (current) {
+                        is ExerciseGuideUiState.Ready -> current.copy(isGeneratingAi = false)
+                        else -> ExerciseGuideUiState.Error(e.message ?: "Couldn't generate steps.")
+                    }
+                }
+            }
         }
     }
 
     fun clearExerciseGuideState() {
+        exerciseGuideRequestId.incrementAndGet()
+        exerciseGuideJob?.cancel()
+        exerciseGuideJob = null
         _exerciseGuideState.value = ExerciseGuideUiState.Idle
     }
 
@@ -821,7 +913,7 @@ class GymViewModel(
     fun refreshCoachPromptChips() {
         viewModelScope.launch {
             _coachPromptChips.value = buildHeuristicCoachChips()
-            if (!isAiConfigured()) return@launch
+            if (!isAiConfigured() || usesOfflineTextProvider()) return@launch
             val slot = AiRouteResolver.textSlot(userProfile.value)
             aiManager.generateCoachPromptSuggestions(
                 userContext = buildCoachChatContext(),
@@ -829,6 +921,25 @@ class GymViewModel(
                 modelId = slot.modelId,
                 offlineModelId = slot.offlineModelId
             )?.takeIf { it.isNotEmpty() }?.let { _coachPromptChips.value = it }
+        }
+    }
+
+    /** Call when Coach tab becomes visible — welcome + heuristics only; offline model loads on send. */
+    fun onCoachTabSelected() {
+        ensureCoachWelcomeMessage()
+    }
+
+    /** Release on-device LLM when leaving Coach tab to free RAM. */
+    fun onCoachTabHidden() {
+        viewModelScope.launch { aiManager.releaseOfflineEngine() }
+    }
+
+    private fun usesOfflineTextProvider(): Boolean {
+        val profile = userProfile.value
+        return if (profile.aiSplitModels) {
+            AiRouteResolver.textSlot(profile).provider == "offline"
+        } else {
+            profile.aiProvider == "offline"
         }
     }
 
@@ -1264,6 +1375,15 @@ class GymViewModel(
 
     fun deleteNotification(id: Int) {
         viewModelScope.launch { repository.deleteNotification(id) }
+    }
+
+    fun markNotificationsViewed() {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            if (userProfile.value.notificationsLastViewedAt < now) {
+                saveProfile(userProfile.value.copy(notificationsLastViewedAt = now))
+            }
+        }
     }
 
     fun recordNotification(title: String, body: String, category: String = "general") {
@@ -2474,7 +2594,7 @@ class GymViewModel(
             _dietCoachInsight.value = dietHeuristic
             _exerciseCoachInsight.value = exerciseHeuristic
 
-            if (isAiConfigured()) {
+            if (isAiConfigured() && !usesOfflineTextProvider()) {
                 val profile = userProfile.value
                 val textSlot = AiRouteResolver.textSlot(profile)
                 val dietSummary = buildDietCoachSummary()

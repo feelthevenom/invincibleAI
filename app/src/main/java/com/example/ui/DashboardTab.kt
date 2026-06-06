@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.WaterDrop
@@ -16,7 +17,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.CoachInsight
@@ -201,61 +204,66 @@ fun DashboardTabContent(
 
         when (homeSection) {
             HomeSection.Diet -> {
-                Box(
+                ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onNavigateToDiet)
-                        .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(16.dp))
-                        .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(16.dp))
-                        .padding(24.dp)
+                        .clickable(onClick = onNavigateToDiet),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(24.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("OVERALL INTAKE", style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.7f))
-                            Icon(Icons.Default.ChevronRight, null, tint = OnSurfaceVariant)
+                            Text("OVERALL INTAKE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.Bottom) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
                             Text(
                                 "%,d".format(consumed),
-                                style = Typography.displayMedium,
-                                color = if (rawRemaining < 0) Error else Secondary
+                                style = MaterialTheme.typography.displayMedium,
+                                color = if (rawRemaining < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
                             )
                             Text(
                                 " / %,d kcal".format(dailyGoal),
-                                style = Typography.titleMedium,
-                                color = OnSurfaceVariant.copy(0.6f),
-                                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.7f),
+                                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                             )
                         }
+                        
+                        LinearProgressIndicator(
+                            progress = { dailyProgress },
+                            modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                            color = if (rawRemaining < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             if (rawRemaining >= 0) {
                                 "%,d kcal remaining".format(rawRemaining)
                             } else {
                                 "%,d kcal over goal".format(-rawRemaining)
                             },
-                            style = Typography.bodySmall,
-                            color = if (rawRemaining >= 0) OnSurfaceVariant.copy(0.6f) else Error
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (rawRemaining >= 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
                         )
-                        if (burned > 0) {
-                            Text("+%d kcal from workouts".format(burned), style = Typography.labelMedium, color = Primary, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        LinearProgressIndicator(
-                            progress = { dailyProgress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                            color = Secondary,
-                            trackColor = SurfaceContainerHighest
-                        )
+                        
                         Spacer(modifier = Modifier.height(24.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            MacroCol("PROTEIN", "${proteinConsumed}g/${proteinGoal}g", Secondary, proteinConsumed.toFloat() / proteinGoal, Modifier.weight(1f))
-                            MacroCol("CARBS", "${carbsConsumed}g/${carbsGoal}g", Primary, carbsConsumed.toFloat() / carbsGoal, Modifier.weight(1f))
+                            MacroCol("PROTEIN", "${proteinConsumed}g/${proteinGoal}g", MaterialTheme.colorScheme.secondary, proteinConsumed.toFloat() / proteinGoal, Modifier.weight(1f))
+                            MacroCol("CARBS", "${carbsConsumed}g/${carbsGoal}g", MaterialTheme.colorScheme.primary, carbsConsumed.toFloat() / carbsGoal, Modifier.weight(1f))
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            MacroCol("FAT", "${fatConsumed}g/${fatGoal}g", Tertiary, fatConsumed.toFloat() / fatGoal, Modifier.weight(1f))
-                            MacroCol("FIBER", "${fiberConsumed}g/${fiberGoal}g", OnSurface, fiberConsumed.toFloat() / fiberGoal, Modifier.weight(1f))
+                            MacroCol("FAT", "${fatConsumed}g/${fatGoal}g", MaterialTheme.colorScheme.tertiary, fatConsumed.toFloat() / fatGoal, Modifier.weight(1f))
+                            MacroCol("FIBER", "${fiberConsumed}g/${fiberGoal}g", MaterialTheme.colorScheme.onSurface, fiberConsumed.toFloat() / fiberGoal, Modifier.weight(1f))
                         }
                     }
                 }
@@ -323,25 +331,24 @@ private fun WaterCard(
     progress: Float,
     onClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(16.dp))
-            .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(16.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.WaterDrop, null, tint = Primary)
-            Spacer(Modifier.width(8.dp))
-            Text("Water", style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.8f))
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.Default.ChevronRight, null, tint = OnSurfaceVariant)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.WaterDrop, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("WATER", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("$todayGlasses of $goalGlasses Glasses", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+            WaterSegmentBar(progress = progress)
+            Text("${todayGlasses * WaterGoalCalculator.ML_PER_GLASS} ml logged today", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text("$todayGlasses of $goalGlasses Glasses", style = Typography.titleLarge, color = OnSurface)
-        WaterSegmentBar(progress = progress)
-        Text("${todayGlasses * WaterGoalCalculator.ML_PER_GLASS} ml logged today", style = Typography.bodySmall, color = OnSurfaceVariant)
     }
 }
 
@@ -354,48 +361,45 @@ private fun BodyCompositionCard(
     useMetric: Boolean,
     onLogClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(16.dp))
-            .border(1.dp, OutlineVariant.copy(0.2f), RoundedCornerShape(16.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.MonitorWeight, null, tint = Secondary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("BODY COMPOSITION", style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.8f))
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            BodyMeasurementTypes.ALL.forEach { type ->
-                val selected = type.id == selectedType
-                FilterChip(
-                    selected = selected,
-                    onClick = { onTypeSelected(type.id) },
-                    label = { Text(type.label, style = Typography.labelMedium) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = Secondary.copy(0.2f),
-                        selectedLabelColor = Secondary
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MonitorWeight, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("BODY COMPOSITION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BodyMeasurementTypes.ALL.forEach { type ->
+                    val selected = type.id == selectedType
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onTypeSelected(type.id) },
+                        label = { Text(type.label) },
+                        leadingIcon = if (selected) {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                        } else null
                     )
-                )
+                }
             }
-        }
-        ProgressSplineChart(points = chartPoints, lineColor = Secondary)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("Current ${BodyMeasurementTypes.labelFor(selectedType)}", style = Typography.labelMedium, color = OnSurfaceVariant)
-                Text(latestValue ?: "—", style = Typography.titleMedium, color = OnSurface)
-            }
-            Button(onClick = onLogClick, shape = RoundedCornerShape(50), colors = ButtonDefaults.buttonColors(containerColor = Primary.copy(0.25f))) {
-                Text(
-                    if (BodyMeasurementTypes.isWeight(selectedType)) "Log Today's Weight" else "Log Measurement",
-                    style = Typography.labelMedium,
-                    color = Primary
-                )
+            ProgressSplineChart(points = chartPoints, lineColor = MaterialTheme.colorScheme.secondary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("Current ${BodyMeasurementTypes.labelFor(selectedType)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(latestValue ?: "—", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                }
+                FilledTonalButton(onClick = onLogClick) {
+                    Text(
+                        if (BodyMeasurementTypes.isWeight(selectedType)) "Log Weight" else "Log Value",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }
@@ -411,11 +415,11 @@ fun DashboardTabPreview() {
 fun MacroCol(label: String, value: String, color: Color, progress: Float, modifier: Modifier = Modifier) {
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = Typography.labelMedium, color = OnSurfaceVariant.copy(0.8f))
-            Text(value, style = Typography.labelMedium, color = color)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.8f))
+            Text(value, style = MaterialTheme.typography.labelMedium, color = color)
         }
         Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(8.dp).background(SurfaceContainerHighest, RoundedCornerShape(50))) {
+        Box(Modifier.fillMaxWidth().height(8.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))) {
             Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(color, RoundedCornerShape(50)))
         }
     }

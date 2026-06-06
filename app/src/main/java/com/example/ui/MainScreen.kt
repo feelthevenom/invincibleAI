@@ -1,11 +1,14 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 package com.example.ui
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import android.Manifest
@@ -63,15 +67,20 @@ fun MainScreenContent(
     var selectedTab by remember { mutableIntStateOf(0) }
     var drawerOpen by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf(MainOverlay.None) }
+    var coachSubNav by remember { mutableStateOf(CoachSubNav.Chat) }
+    var coachHistoryId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     var lastBackPress by remember { mutableLongStateOf(0L) }
     var showWaterReminderDialog by remember { mutableStateOf(false) }
+    val notifications by viewModel.allNotifications.collectAsState()
+    val hasUnreadNotifications = remember(notifications, profile.notificationsLastViewedAt) {
+        notifications.any { it.timestamp > profile.notificationsLastViewedAt }
+    }
 
     LaunchedEffect(
         profile.workoutReminderEnabled,
         profile.workoutReminderTimeMinute,
-        profile.workoutReminderRepeat,
-        profile.notificationsEnabled
+        profile.workoutReminderRepeat
     ) {
         if (profile.workoutReminderEnabled) {
             WorkoutNotificationHelper.scheduleReminder(context, profile)
@@ -88,8 +97,7 @@ fun MainScreenContent(
         profile.waterReminderDailyTimeMinute,
         profile.waterReminderWeeklyDay,
         profile.waterReminderWindowStartMinute,
-        profile.waterReminderWindowEndMinute,
-        profile.notificationsEnabled
+        profile.waterReminderWindowEndMinute
     ) {
         if (profile.waterReminderEnabled) {
             WaterNotificationHelper.scheduleReminders(context, profile)
@@ -103,6 +111,12 @@ fun MainScreenContent(
     ) { granted ->
         if (granted) {
             viewModel.setNotificationsEnabled(true)
+            if (profile.waterReminderEnabled) {
+                WaterNotificationHelper.scheduleReminders(context, profile)
+            }
+            if (profile.workoutReminderEnabled) {
+                WorkoutNotificationHelper.scheduleReminder(context, profile)
+            }
             Toast.makeText(context, "Notifications enabled", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Notifications are required for hydration reminders", Toast.LENGTH_SHORT).show()
@@ -116,14 +130,33 @@ fun MainScreenContent(
         viewModel.checkForAppUpdate(promptIfAvailable = true)
     }
 
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 3) {
+            viewModel.onCoachTabSelected()
+        } else {
+            viewModel.onCoachTabHidden()
+            coachSubNav = CoachSubNav.Chat
+            coachHistoryId = null
+        }
+    }
+
     BackHandler(enabled = !workoutHandlesBack) {
         when {
             overlay == MainOverlay.WaterReminderSettings -> overlay = MainOverlay.WaterTracking
             overlay == MainOverlay.WaterTracking -> overlay = MainOverlay.None
             overlay == MainOverlay.WorkoutReminder -> overlay = MainOverlay.None
             overlay == MainOverlay.NotificationHistory -> overlay = MainOverlay.None
+            overlay == MainOverlay.AiSettings -> overlay = MainOverlay.None
+            overlay == MainOverlay.Settings -> overlay = MainOverlay.None
             overlay != MainOverlay.None -> overlay = MainOverlay.None
             drawerOpen -> drawerOpen = false
+            selectedTab == 3 && coachSubNav == CoachSubNav.HistoryDetail -> {
+                coachHistoryId = null
+                coachSubNav = CoachSubNav.HistoryList
+            }
+            selectedTab == 3 && coachSubNav == CoachSubNav.HistoryList -> {
+                coachSubNav = CoachSubNav.Chat
+            }
             selectedTab != 0 -> selectedTab = 0
             else -> {
                 val now = System.currentTimeMillis()
@@ -140,224 +173,323 @@ fun MainScreenContent(
     val isKeyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            bottomBar = {
-                if (!isKeyboardVisible || selectedTab != 3) {
-                    Column {
-                        HorizontalDivider(color = OutlineVariant.copy(0.2f))
-                        NavigationBar(
-                            containerColor = Surface.copy(alpha = 0.9f),
-                            contentColor = OnSurfaceVariant,
-                            tonalElevation = 0.dp
-                        ) {
-                            NavigationBarItem(
-                                selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
-                                icon = { Icon(Icons.Default.Home, null) },
-                                label = { Text("Home", style = Typography.labelMedium) },
-                                colors = navColors(selectedTab == 0)
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
-                                icon = { Icon(Icons.Default.Restaurant, null) },
-                                label = { Text("Diet", style = Typography.labelMedium) },
-                                colors = navColors(selectedTab == 1)
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 2,
-                                onClick = { selectedTab = 2 },
-                                icon = { Icon(Icons.Default.FitnessCenter, null) },
-                                label = { Text("Workout", style = Typography.labelMedium) },
-                                colors = navColors(selectedTab == 2)
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 3,
-                                onClick = { selectedTab = 3 },
-                                icon = { Icon(Icons.Default.Psychology, null) },
-                                label = { Text("Coach", style = Typography.labelMedium) },
-                                colors = navColors(selectedTab == 3)
-                            )
-                        }
-                    }
-                }
-            },
-            topBar = {
-                if (selectedTab != 3) {
-                    TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("GYM AI", style = Typography.headlineMedium, color = Primary)
-                            if (aiEnabled) {
-                                Spacer(Modifier.width(6.dp))
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = "AI mode active",
-                                    tint = Primary,
-                                    modifier = Modifier.size(20.dp)
+    AppSidebarDrawer(
+        isOpen = drawerOpen,
+        onDismiss = { drawerOpen = false },
+        onPersonalDetails = { overlay = MainOverlay.PersonalDetails },
+        onAiSettings = { overlay = MainOverlay.AiSettings },
+        onSettings = { overlay = MainOverlay.Settings }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                bottomBar = {
+                    if (!isKeyboardVisible) {
+                        Column {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.2f))
+                            NavigationBar(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                                tonalElevation = 0.dp
+                            ) {
+                                NavigationBarItem(
+                                    selected = selectedTab == 0,
+                                    onClick = { selectedTab = 0 },
+                                    icon = { Icon(Icons.Default.Home, null) },
+                                    label = { Text("Home") },
+                                    colors = navColors(selectedTab == 0)
+                                )
+                                NavigationBarItem(
+                                    selected = selectedTab == 1,
+                                    onClick = { selectedTab = 1 },
+                                    icon = { Icon(Icons.Default.Restaurant, null) },
+                                    label = { Text("Diet") },
+                                    colors = navColors(selectedTab == 1)
+                                )
+                                NavigationBarItem(
+                                    selected = selectedTab == 2,
+                                    onClick = { selectedTab = 2 },
+                                    icon = { Icon(Icons.Default.FitnessCenter, null) },
+                                    label = { Text("Workout") },
+                                    colors = navColors(selectedTab == 2)
+                                )
+                                NavigationBarItem(
+                                    selected = selectedTab == 3,
+                                    onClick = { selectedTab = 3 },
+                                    icon = { Icon(Icons.Default.Psychology, null) },
+                                    label = { Text("Coach") },
+                                    colors = navColors(selectedTab == 3)
                                 )
                             }
                         }
-                    },
-                    navigationIcon = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            IconButton(onClick = { drawerOpen = true }) {
-                                Icon(Icons.Default.Menu, "Menu", tint = OnSurface)
+                    }
+                },
+                topBar = {
+                    CenterAlignedTopAppBar(
+                        title = {
+                            when {
+                                selectedTab == 3 && coachSubNav == CoachSubNav.HistoryList -> {
+                                    Text(
+                                        "Chat History",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                selectedTab == 3 && coachSubNav == CoachSubNav.HistoryDetail -> {
+                                    Text(
+                                        "Past conversation",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "GYM AI",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (aiEnabled) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
-                            AsyncImage(
-                                model = "https://lh3.googleusercontent.com/aida-public/AB6AXuDIOsswt2MZPJrY9NxjNjEGkusn6t4irxXiZNd7S9g1R8FKobj-FCLjxCO9GWjsVMoEE7BQnFJ7P9hKj6cs9WYYHH9ycIIPKS_2hQo1KfCGEK6LzTpTfXcKWs4DjdllMY50yP29c3ECZ210w6NIr0RYfFer8kUSJjoH6rkvnf6GSHb2ctOqoANY1ZlXPzHY-SGBGE9IFG4l48QPhMKJ2qHxCa3w8TYm8qYJbwlCbGXIA2Z5JYNP-CbHNey9KIxVp2iEa38YsAJN2Og2",
-                                contentDescription = "Profile",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(SurfaceContainerHighest)
-                                    .clickable { drawerOpen = true }
+                        },
+                        navigationIcon = {
+                            if (selectedTab == 3 && coachSubNav != CoachSubNav.Chat) {
+                                IconButton(onClick = {
+                                    when (coachSubNav) {
+                                        CoachSubNav.HistoryDetail -> {
+                                            coachHistoryId = null
+                                            coachSubNav = CoachSubNav.HistoryList
+                                        }
+                                        CoachSubNav.HistoryList -> coachSubNav = CoachSubNav.Chat
+                                        else -> coachSubNav = CoachSubNav.Chat
+                                    }
+                                }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                                }
+                            } else {
+                                IconButton(onClick = { drawerOpen = true }) {
+                                    Icon(Icons.Default.Menu, "Menu")
+                                }
+                            }
+                        },
+                        actions = {
+                            if (selectedTab == 3 && coachSubNav == CoachSubNav.Chat) {
+                                IconButton(onClick = {
+                                    viewModel.refreshCoachHistory()
+                                    coachSubNav = CoachSubNav.HistoryList
+                                }) {
+                                    Icon(Icons.Default.History, "Chat history")
+                                }
+                                IconButton(onClick = { overlay = MainOverlay.AiSettings }) {
+                                    Icon(Icons.Default.Settings, "AI settings")
+                                }
+                            }
+                            IconButton(onClick = {
+                                if (!profile.notificationsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                                    PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    showWaterReminderDialog = true
+                                } else {
+                                    viewModel.markNotificationsViewed()
+                                    overlay = MainOverlay.NotificationHistory
+                                }
+                            }) {
+                                BadgedBox(
+                                    badge = {
+                                        if (hasUnreadNotifications) {
+                                            Badge()
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Notifications, "Notifications")
+                                }
+                            }
+                        }
+                    )
+                },
+                containerColor = MaterialTheme.colorScheme.background
+            ) { padding ->
+                Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                slideInHorizontally { it } + fadeIn() togetherWith
+                                    slideOutHorizontally { -it / 2 } + fadeOut()
+                            } else {
+                                slideInHorizontally { -it } + fadeIn() togetherWith
+                                    slideOutHorizontally { it / 2 } + fadeOut()
+                            }.using(
+                                SizeTransform(clip = false)
+                            )
+                        },
+                        label = "tab_transition"
+                    ) { targetTab ->
+                        when (targetTab) {
+                            0 -> DashboardTab(
+                                viewModel = viewModel,
+                                onOpenWaterTracking = { overlay = MainOverlay.WaterTracking },
+                                onNavigateToDiet = { selectedTab = 1 },
+                                onNavigateToWorkout = { selectedTab = 2 },
+                                onOpenWorkoutReminder = { overlay = MainOverlay.WorkoutReminder }
+                            )
+                            1 -> dietTab()
+                            2 -> WorkoutTab(
+                                viewModel = viewModel,
+                                onOpenWorkoutReminder = { overlay = MainOverlay.WorkoutReminder },
+                                onNavigateToCoach = { selectedTab = 3 },
+                                aiEnabled = aiEnabled
+                            )
+                            3 -> CoachChatScreen(
+                                viewModel = viewModel,
+                                onOpenSettings = { overlay = MainOverlay.AiSettings },
+                                subNav = coachSubNav,
+                                onSubNavChange = { coachSubNav = it },
+                                selectedHistoryId = coachHistoryId,
+                                onSelectedHistoryIdChange = { coachHistoryId = it },
+                                embedded = true
                             )
                         }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            if (!profile.notificationsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                                PackageManager.PERMISSION_GRANTED
-                            ) {
-                                showWaterReminderDialog = true
-                            } else {
-                                overlay = MainOverlay.NotificationHistory
-                            }
-                        }) {
-                            Icon(Icons.Default.Notifications, "Notifications", tint = Primary)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
-                )
-                }
-            },
-            containerColor = Background
-        ) { padding ->
-            Box(modifier = Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
-                when (selectedTab) {
-                    0 -> DashboardTab(
-                        viewModel = viewModel,
-                        onOpenWaterTracking = { overlay = MainOverlay.WaterTracking },
-                        onNavigateToDiet = { selectedTab = 1 },
-                        onNavigateToWorkout = { selectedTab = 2 },
-                        onOpenWorkoutReminder = { overlay = MainOverlay.WorkoutReminder }
-                    )
-                    1 -> dietTab()
-                    2 -> WorkoutTab(
-                        viewModel = viewModel,
-                        onOpenWorkoutReminder = { overlay = MainOverlay.WorkoutReminder },
-                        onNavigateToCoach = { selectedTab = 3 },
-                        aiEnabled = aiEnabled
-                    )
-                    3 -> CoachChatScreen(
-                        viewModel = viewModel,
-                        onOpenSettings = { overlay = MainOverlay.Settings }
-                    )
-                    else -> CoachChatScreen(
-                        viewModel = viewModel,
-                        onOpenSettings = { overlay = MainOverlay.Settings }
-                    )
+                    }
                 }
             }
-        }
 
-        AppSidebarDrawer(
-            isOpen = drawerOpen,
-            onDismiss = { drawerOpen = false },
-            onPersonalDetails = { overlay = MainOverlay.PersonalDetails },
-            onSettings = { overlay = MainOverlay.Settings },
-            onBackupRestore = {
-                context.startActivity(Intent(context, com.example.BackupRestoreActivity::class.java))
-            },
-            modifier = Modifier.zIndex(2f)
-        )
+            AnimatedContent(
+                targetState = overlay,
+                transitionSpec = {
+                    if (targetState != MainOverlay.None) {
+                        slideInVertically { it } + fadeIn() togetherWith
+                            fadeOut(animationSpec = tween(150))
+                    } else {
+                        fadeIn() togetherWith
+                            slideOutVertically { it } + fadeOut()
+                    }
+                },
+                label = "overlay_transition",
+                modifier = Modifier.fillMaxSize()
+            ) { currentOverlay ->
+                when (currentOverlay) {
+                    MainOverlay.PersonalDetails -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        PersonalDetailsScreenContent(
+                            profile = profile,
+                            onBack = { overlay = MainOverlay.None },
+                            onSave = { td, dc, p, c, f, fi, weekly, cuisines ->
+                                onPersonalDetailsSave(td, dc, p, c, f, fi, weekly, cuisines)
+                                overlay = MainOverlay.None
+                            },
+                            onSaveWorkout = { fl, skipped, squat, bench, dead, days, weekStart, equip, gym ->
+                                viewModel.saveWorkoutPreferencesEdits(fl, skipped, squat, bench, dead, days, weekStart, equip, gym)
+                            },
+                            onSavePhysical = { age, gender, height ->
+                                viewModel.savePhysicalMetricsEdits(age, gender, height)
+                            },
+                            onSaveActivityGoal = { activity, goal ->
+                                viewModel.saveActivityGoalEdits(activity, goal)
+                            }
+                        )
+                    }
+                    MainOverlay.AiSettings -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        AiSettingsScreen(viewModel = viewModel, onBack = { overlay = MainOverlay.None })
+                    }
+                    MainOverlay.Settings -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        SettingsScreen(viewModel = viewModel, onBack = { overlay = MainOverlay.None })
+                    }
+                    MainOverlay.WaterTracking -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        WaterTrackingScreen(
+                            viewModel = viewModel,
+                            onBack = { overlay = MainOverlay.None },
+                            onOpenReminderSettings = { overlay = MainOverlay.WaterReminderSettings }
+                        )
+                    }
+                    MainOverlay.WaterReminderSettings -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(4f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        WaterReminderSettingsScreen(
+                            viewModel = viewModel,
+                            onBack = { overlay = MainOverlay.WaterTracking }
+                        )
+                    }
+                    MainOverlay.NotificationHistory -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        NotificationHistoryScreen(
+                            viewModel = viewModel,
+                            onBack = { overlay = MainOverlay.None }
+                        )
+                    }
+                    MainOverlay.WorkoutReminder -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3f)
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        WorkoutReminderScreen(
+                            viewModel = viewModel,
+                            onBack = { overlay = MainOverlay.None }
+                        )
+                    }
+                    MainOverlay.None -> Spacer(Modifier.fillMaxSize())
+                }
+            }
 
-        when (overlay) {
-            MainOverlay.PersonalDetails -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f)
-                    .background(Background)
-            ) {
-                PersonalDetailsScreenContent(
-                    profile = profile,
-                    onBack = { overlay = MainOverlay.None },
-                    onSave = { td, dc, p, c, f, fi, weekly, cuisines ->
-                        onPersonalDetailsSave(td, dc, p, c, f, fi, weekly, cuisines)
-                        overlay = MainOverlay.None
-                    },
-                    onSaveWorkout = { fl, skipped, squat, bench, dead, days, weekStart, equip, gym ->
-                        viewModel.saveWorkoutPreferencesEdits(fl, skipped, squat, bench, dead, days, weekStart, equip, gym)
-                    },
-                    onSavePhysical = { age, gender, height ->
-                        viewModel.savePhysicalMetricsEdits(age, gender, height)
-                    },
-                    onSaveActivityGoal = { activity, goal ->
-                        viewModel.saveActivityGoalEdits(activity, goal)
+            if (showWaterReminderDialog) {
+                WaterReminderPermissionDialog(
+                    onDismiss = { showWaterReminderDialog = false },
+                    onEnable = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            when {
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                                    PackageManager.PERMISSION_GRANTED -> {
+                                    viewModel.setNotificationsEnabled(true)
+                                    showWaterReminderDialog = false
+                                }
+                                else -> notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        } else {
+                            viewModel.setNotificationsEnabled(true)
+                            showWaterReminderDialog = false
+                        }
                     }
                 )
             }
-            MainOverlay.Settings -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f)
-                    .background(Background)
-            ) {
-                SettingsScreen(viewModel = viewModel, onBack = { overlay = MainOverlay.None })
-            }
-            MainOverlay.WaterTracking -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f)
-                    .background(Background)
-            ) {
-                WaterTrackingScreen(
-                    viewModel = viewModel,
-                    onBack = { overlay = MainOverlay.None },
-                    onOpenReminderSettings = { overlay = MainOverlay.WaterReminderSettings }
-                )
-            }
-            MainOverlay.WaterReminderSettings -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(4f)
-                    .background(Background)
-            ) {
-                WaterReminderSettingsScreen(
-                    viewModel = viewModel,
-                    onBack = { overlay = MainOverlay.WaterTracking }
-                )
-            }
-            MainOverlay.NotificationHistory -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f)
-                    .background(Background)
-            ) {
-                NotificationHistoryScreen(
-                    viewModel = viewModel,
-                    onBack = { overlay = MainOverlay.None }
-                )
-            }
-            MainOverlay.WorkoutReminder -> Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(3f)
-                    .background(Background)
-            ) {
-                WorkoutReminderScreen(
-                    viewModel = viewModel,
-                    onBack = { overlay = MainOverlay.None }
-                )
-            }
-            MainOverlay.None -> {}
         }
+    }
 
         if (showWaterReminderDialog) {
             WaterReminderPermissionDialog(
@@ -396,9 +528,9 @@ fun MainScreenPreview() {
 
 @Composable
 private fun navColors(selected: Boolean) = NavigationBarItemDefaults.colors(
-    selectedIconColor = Secondary,
-    selectedTextColor = Secondary,
+    selectedIconColor = MaterialTheme.colorScheme.secondary,
+    selectedTextColor = MaterialTheme.colorScheme.secondary,
     indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-    unselectedIconColor = OnSurfaceVariant.copy(0.6f),
-    unselectedTextColor = OnSurfaceVariant.copy(0.6f)
+    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
+    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
 )
