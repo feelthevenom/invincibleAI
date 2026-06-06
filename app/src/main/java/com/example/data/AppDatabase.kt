@@ -6,8 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [UserProfile::class, ExerciseSet::class, MealEntry::class, CustomFoodItem::class, CustomExercise::class, ProgressPhoto::class],
-    version = 12,
+    entities = [
+        UserProfile::class, ExerciseSet::class, MealEntry::class, CustomFoodItem::class,
+        CustomExercise::class, ProgressPhoto::class, WorkoutRoutine::class, RoutineExercise::class,
+        WaterLog::class, WeightLog::class, BodyMeasurementLog::class,
+        DailyGoalSnapshot::class, AppNotification::class,
+        CachedExerciseGuide::class, CoachChatHistoryEntity::class
+    ],
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,7 +29,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "gym_database"
-                ).fallbackToDestructiveMigration(dropAllTables = true)
+                )
+                    .addMigrations(*DatabaseMigrations.ALL)
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance

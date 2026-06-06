@@ -19,6 +19,9 @@ import kotlinx.coroutines.withContext
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.AiRouteResolver
 import com.example.GymViewModel
 import com.example.data.CustomFoodItem
 import com.example.data.FoodItem
@@ -239,6 +243,9 @@ fun MealDetailOverlay(
 
                     AnimatedContent(
                         targetState = page,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         transitionSpec = {
                             slideInHorizontally(tween(300)) { it / 3 } + fadeIn(tween(300)) togetherWith
                                 slideOutHorizontally(tween(300)) { -it / 3 } + fadeOut(tween(300))
@@ -410,8 +417,8 @@ private fun FoodSearchPage(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item(key = "custom_create") {
@@ -563,7 +570,8 @@ private fun CustomFoodCreatePage(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Enter nutrition per 100g", style = Typography.bodyMedium, color = OnSurfaceVariant)
@@ -693,46 +701,57 @@ private fun MealDetailPage(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        Text("Max ${budget.calories} kcal for this meal", style = Typography.bodySmall, color = OnSurfaceVariant)
-        Spacer(modifier = Modifier.height(16.dp))
-        MealProgressHeader(
-            kcal = consumedCal,
-            target = budget.calories,
-            statusColor = if (consumedCal > budget.calories) Error else Secondary
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniMacroBar("PRO", "${consumedPro}g", Primary, progressRatio(consumedPro, budget.protein), Modifier.weight(1f))
-            MiniMacroBar("CAR", "${consumedCarb}g", Tertiary, progressRatio(consumedCarb, budget.carbs), Modifier.weight(1f))
-            MiniMacroBar("FAT", "${consumedFat}g", Error, progressRatio(consumedFat, budget.fat), Modifier.weight(1f))
-            MiniMacroBar("FIB", "${consumedFib}g", Secondary, progressRatio(consumedFib, budget.fiber), Modifier.weight(1f))
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("LOGGED ITEMS", style = Typography.labelMedium, color = OnSurfaceVariant)
-        Spacer(modifier = Modifier.height(12.dp))
-        if (entries.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp)).padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("No items yet. Tap Add Item below.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Max ${budget.calories} kcal for this meal", style = Typography.bodySmall, color = OnSurfaceVariant)
+            Spacer(modifier = Modifier.height(16.dp))
+            MealProgressHeader(
+                kcal = consumedCal,
+                target = budget.calories,
+                statusColor = if (consumedCal > budget.calories) Error else Secondary
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MiniMacroBar("PRO", "${consumedPro}g", Primary, progressRatio(consumedPro, budget.protein), Modifier.weight(1f))
+                MiniMacroBar("CAR", "${consumedCarb}g", Tertiary, progressRatio(consumedCarb, budget.carbs), Modifier.weight(1f))
+                MiniMacroBar("FAT", "${consumedFat}g", Error, progressRatio(consumedFat, budget.fat), Modifier.weight(1f))
+                MiniMacroBar("FIB", "${consumedFib}g", Secondary, progressRatio(consumedFib, budget.fiber), Modifier.weight(1f))
             }
-        } else {
-            entries.forEach { entry ->
-                LoggedFoodRow(
-                    entry = entry, 
-                    onDelete = { entryToDelete = entry },
-                    onEdit = { entryToEdit = entry }
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("LOGGED ITEMS", style = Typography.labelMedium, color = OnSurfaceVariant)
+            Spacer(modifier = Modifier.height(12.dp))
+            if (entries.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SurfaceContainerHighest.copy(0.3f), RoundedCornerShape(12.dp))
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No items yet. Tap Add Item below.", style = Typography.bodyMedium, color = OnSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp)
+                ) {
+                    items(entries, key = { it.id }) { entry ->
+                        LoggedFoodRow(
+                            entry = entry,
+                            onDelete = { entryToDelete = entry },
+                            onEdit = { entryToEdit = entry }
+                        )
+                    }
+                }
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 32.dp)
+                .navigationBarsPadding(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
@@ -745,7 +764,7 @@ private fun MealDetailPage(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Add Item", style = Typography.headlineMedium.copy(fontSize = 18.sp))
             }
-            
+
             Button(
                 onClick = { showCameraOptions = true },
                 modifier = Modifier.weight(0.2f).height(56.dp),
@@ -756,13 +775,13 @@ private fun MealDetailPage(
                 Icon(Icons.Default.CameraAlt, contentDescription = "Camera")
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
     }
 
     if (showCameraOptions) {
         val profile by viewModel.userProfile.collectAsState()
-        val aiReady = remember(profile) { viewModel.aiStatus().isReady }
-        val visionReady = remember(profile) { viewModel.supportsVision() }
+        val visionSlot = remember(profile) { AiRouteResolver.visionSlot(profile) }
+        val aiReady = remember(profile, visionSlot) { viewModel.aiStatus().isReady }
+        val visionReady = remember(profile, visionSlot) { viewModel.supportsVision() }
         when {
             !aiReady -> {
                 AlertDialog(
@@ -778,8 +797,8 @@ private fun MealDetailPage(
                     title = { Text("Not Available") },
                     text = {
                         Text(
-                            "Food photo analysis is not available with ${com.example.data.AiProviderConfig.displayNameFor(profile.aiProvider)}. " +
-                                "Switch to Gemini or Offline in AI Settings."
+                            "Food photo analysis is not available with ${com.example.data.AiProviderConfig.displayNameFor(visionSlot.provider)}. " +
+                                "Choose a vision-capable provider in AI Settings."
                         )
                     },
                     confirmButton = { TextButton(onClick = { showCameraOptions = false }) { Text("OK") } }
@@ -901,11 +920,10 @@ private fun PlateAnalysisPage(
     var analysisError by remember { mutableStateOf<String?>(null) }
     var isAnalyzing by remember { mutableStateOf(true) }
     val profile by viewModel.userProfile.collectAsState()
-    val aiStatus = remember(profile.aiProvider, profile.aiModelId, profile.offlineModelId) {
-        viewModel.aiStatus()
-    }
+    val visionSlot = remember(profile) { AiRouteResolver.visionSlot(profile) }
+    val aiStatus = remember(profile, visionSlot) { viewModel.aiStatus() }
 
-    LaunchedEffect(bitmap, profile.aiProvider, profile.aiModelId, profile.offlineModelId) {
+    LaunchedEffect(bitmap, visionSlot.provider, visionSlot.modelId, profile.offlineModelId) {
         isAnalyzing = true
         analysisError = null
         when (val result = viewModel.analyzeFoodImage(bitmap)) {
@@ -927,7 +945,7 @@ private fun PlateAnalysisPage(
                 CircularProgressIndicator(color = Primary)
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    when (profile.aiProvider) {
+                    when (visionSlot.provider) {
                         "offline" -> "Running on-device AI…"
                         "groq" -> "Analyzing with Groq…"
                         else -> "Analyzing with Gemini…"
@@ -1027,7 +1045,8 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Text("Nutrition per 100g", style = Typography.labelMedium, color = OnSurfaceVariant)
         Spacer(modifier = Modifier.height(8.dp))

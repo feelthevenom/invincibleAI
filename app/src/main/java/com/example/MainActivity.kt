@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.ui.MainScreen
 import com.example.ui.OnboardingScreen
 import com.example.ui.WelcomeScreen
+import com.example.ui.WorkoutSetupScreen
 import com.example.ui.theme.MyApplicationTheme
 
 import androidx.fragment.app.FragmentActivity
@@ -39,13 +40,32 @@ class MainActivity : FragmentActivity() {
                             app.offRepository,
                             app.aiManager,
                             app.modelDownloadManager,
-                            app.secureStorageManager
+                            app.secureStorageManager,
+                            app.exerciseGuideRepository,
+                            app.coachHistoryRepository
                         )
                     )
 
+                    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                    DisposableEffect(viewModel, lifecycleOwner) {
+                        val observer = object : androidx.lifecycle.DefaultLifecycleObserver {
+                            override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                                viewModel.archiveCoachSessionOnBackground()
+                            }
+                        }
+                        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+                        onDispose {
+                            androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+                        }
+                    }
+
                     val profile by viewModel.userProfile.collectAsState()
                     val navController = rememberNavController()
-                    val startDestination = if (profile.onboardingComplete) "main" else "welcome"
+                    val startDestination = when {
+                        !profile.onboardingComplete -> "welcome"
+                        !profile.workoutSetupComplete -> "workout_setup"
+                        else -> "main"
+                    }
 
                     NavHost(
                         navController = navController,
@@ -60,10 +80,21 @@ class MainActivity : FragmentActivity() {
                         }
                         composable("onboarding") {
                             OnboardingScreen(viewModel) {
-                                navController.navigate("main") {
+                                navController.navigate("workout_setup") {
                                     popUpTo("onboarding") { inclusive = true }
                                 }
                             }
+                        }
+                        composable("workout_setup") {
+                            WorkoutSetupScreen(
+                                viewModel = viewModel,
+                                profile = profile,
+                                onComplete = {
+                                    navController.navigate("main") {
+                                        popUpTo("workout_setup") { inclusive = true }
+                                    }
+                                }
+                            )
                         }
                         composable("main") {
                             MainScreen(viewModel)

@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.*
 
-enum class MainOverlay { None, PersonalDetails, Settings }
+enum class MainOverlay { None, PersonalDetails, Settings, WaterTracking, WaterReminderSettings, NotificationHistory, WorkoutReminder }
 
 @Composable
 fun AppSidebarDrawer(

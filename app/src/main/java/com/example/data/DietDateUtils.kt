@@ -24,6 +24,10 @@ object DietDateUtils {
 
     fun isToday(dayStart: Long): Boolean = dayStart == startOfTodayMillis()
 
+    fun isFuture(dayStart: Long): Boolean = dayStart > startOfTodayMillis()
+
+    fun isPastOrToday(dayStart: Long): Boolean = !isFuture(dayStart)
+
     fun timestampForDay(dayStart: Long, referenceMs: Long = System.currentTimeMillis()): Long {
         if (isToday(dayStart)) return referenceMs
         val ref = Calendar.getInstance().apply { timeInMillis = referenceMs }
@@ -39,6 +43,11 @@ object DietDateUtils {
     fun formatDisplayDate(dayStart: Long): String {
         val fmt = SimpleDateFormat("EEEE, MMM d, yyyy", Locale.getDefault())
         return fmt.format(dayStart)
+    }
+
+    fun formatLogTimestamp(timestamp: Long): String {
+        val fmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+        return fmt.format(timestamp)
     }
 
     fun formatMonthYear(dayStart: Long): String {
@@ -61,12 +70,16 @@ object DietDateUtils {
         val goalMet: Boolean
     )
 
-    fun summarizeDays(meals: List<MealEntry>, dailyGoal: Int): Map<Long, DaySummary> {
+    fun summarizeDays(
+        meals: List<MealEntry>,
+        goalForDay: (Long) -> Int
+    ): Map<Long, DaySummary> {
         if (meals.isEmpty()) return emptyMap()
         return meals.groupBy { meal ->
             startOfDayMillis(Calendar.getInstance().apply { timeInMillis = meal.timestamp })
         }.mapValues { (dayStart, dayMeals) ->
             val total = dayMeals.sumOf { it.calories }
+            val dailyGoal = goalForDay(dayStart).coerceAtLeast(1)
             DaySummary(
                 dayStart = dayStart,
                 totalCalories = total,
@@ -75,6 +88,10 @@ object DietDateUtils {
             )
         }
     }
+
+    @Deprecated("Use summarizeDays with goalForDay for historical accuracy")
+    fun summarizeDays(meals: List<MealEntry>, dailyGoal: Int): Map<Long, DaySummary> =
+        summarizeDays(meals) { dailyGoal }
 
     fun summarizeWorkoutDays(sets: List<ExerciseSet>): Map<Long, DaySummary> {
         if (sets.isEmpty()) return emptyMap()
@@ -88,6 +105,53 @@ object DietDateUtils {
                 goalMet = daySets.isNotEmpty() && daySets.all { it.isCompleted }
             )
         }
+    }
+
+    fun summarizeWaterDays(
+        logs: List<com.example.data.WaterLog>,
+        goalGlasses: Int
+    ): Map<Long, DaySummary> {
+        if (logs.isEmpty()) return emptyMap()
+        return logs.groupBy { log ->
+            startOfDayMillis(Calendar.getInstance().apply { timeInMillis = log.timestamp })
+        }.mapValues { (dayStart, dayLogs) ->
+            val totalMl = dayLogs.sumOf { it.amountMl }
+            val glasses = (totalMl / com.example.data.WaterGoalCalculator.ML_PER_GLASS)
+            DaySummary(
+                dayStart = dayStart,
+                totalCalories = glasses,
+                hasData = glasses > 0,
+                goalMet = goalGlasses > 0 && glasses >= goalGlasses
+            )
+        }
+    }
+
+    fun last7DayStarts(endingAt: Long = startOfTodayMillis()): List<Long> =
+        (6 downTo 0).map { offset -> endingAt - offset * DAY_MS }
+
+    fun formatShortDay(dayStart: Long): String {
+        val cal = Calendar.getInstance().apply { timeInMillis = dayStart }
+        val dayFmt = SimpleDateFormat("EEE", Locale.getDefault())
+        return "${dayFmt.format(dayStart)} ${cal.get(Calendar.DAY_OF_MONTH)}"
+    }
+
+    fun formatTimeFromMinute(minuteOfDay: Int): String {
+        val hour = minuteOfDay / 60
+        val minute = minuteOfDay % 60
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+        }
+        return SimpleDateFormat("hh:mm a", Locale.getDefault()).format(cal.time)
+    }
+
+    fun dayStartFromMinute(minuteOfDay: Int, dayStart: Long = startOfTodayMillis()): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = dayStart }
+        cal.set(Calendar.HOUR_OF_DAY, minuteOfDay / 60)
+        cal.set(Calendar.MINUTE, minuteOfDay % 60)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 
     fun daysInMonthGrid(year: Int, month: Int): List<CalendarDayCell> {

@@ -8,6 +8,8 @@ import com.example.data.UserProfile
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -122,7 +124,7 @@ object BackupRestoreManager {
                                     return@runCatching BackupResult.Error("Invalid backup: manifest.json is empty")
                                 }
                                 val json = JSONObject(text)
-                                if (json.optInt("version", 0) != BACKUP_VERSION) {
+                                if (json.optInt("version", 0) < 1) {
                                     return@runCatching BackupResult.Error("Unsupported backup version")
                                 }
                             }
@@ -177,6 +179,13 @@ object BackupRestoreManager {
 
             AppDatabase.getDatabase(context)
             (context.applicationContext as com.example.GymApplication).refreshRepositoryAfterRestore()
+            runBlocking {
+                val dao = AppDatabase.getDatabase(context).gymDao()
+                val profile = dao.getUserProfile().first()
+                if (profile != null) {
+                    dao.insertOrUpdateProfile(com.example.data.WorkoutSetupProgress.profileAfterRestore(profile))
+                }
+            }
             BackupResult.Success
         }.getOrElse {
             AppDatabase.getDatabase(context)

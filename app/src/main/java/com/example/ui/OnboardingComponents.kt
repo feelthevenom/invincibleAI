@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -146,18 +147,46 @@ fun OnboardingInfoCard(title: String, value: String, subtitle: String? = null, h
 }
 
 @Composable
-fun GoalCard(title: String, isSelected: Boolean, onClick: () -> Unit) {
+fun GoalCard(
+    title: String,
+    isSelected: Boolean,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SurfaceContainer, RoundedCornerShape(12.dp))
+            .background(
+                if (isSelected) Primary.copy(0.08f) else SurfaceContainer,
+                RoundedCornerShape(12.dp)
+            )
             .border(1.dp, if (isSelected) Primary else OutlineVariant.copy(0.3f), RoundedCornerShape(12.dp))
             .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
+        if (icon != null) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .background(
+                        if (isSelected) Primary.copy(0.2f) else Color.White.copy(0.06f),
+                        RoundedCornerShape(10.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = if (isSelected) Primary else OnSurfaceVariant, modifier = Modifier.size(22.dp))
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = Typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = OnSurface)
+            subtitle?.let {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(it, style = Typography.bodySmall, color = OnSurfaceVariant)
+            }
+        }
         if (isSelected) {
             Box(
                 Modifier
