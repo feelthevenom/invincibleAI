@@ -112,6 +112,10 @@ fun MainScreenContent(
 
     val workoutHandlesBack by viewModel.workoutHandlesBack.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.checkForAppUpdate(promptIfAvailable = true)
+    }
+
     BackHandler(enabled = !workoutHandlesBack) {
         when {
             overlay == MainOverlay.WaterReminderSettings -> overlay = MainOverlay.WaterTracking
@@ -375,6 +379,11 @@ fun MainScreenContent(
                 }
             )
         }
+
+        AppUpdatePromptDialog(
+            viewModel = viewModel,
+            onDismiss = { viewModel.dismissUpdatePrompt() }
+        )
     }
 }
 

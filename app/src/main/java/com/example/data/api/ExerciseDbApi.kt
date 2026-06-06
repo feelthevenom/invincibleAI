@@ -4,13 +4,18 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
+import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
+
+class ExerciseDbRateLimitException : Exception("Exercise database is busy. Try again in a minute or use AI Fill.")
 
 @JsonClass(generateAdapter = true)
 data class ExerciseDbListResponse(
@@ -78,18 +83,38 @@ class ExerciseDbApiClient {
         .build()
         .create(ExerciseDbService::class.java)
 
-    suspend fun searchByName(name: String, limit: Int = 25): List<ExerciseDbExerciseDto> {
-        val response = service.searchByName(name, limit)
-        if (!response.success) return emptyList()
-        return response.data.orEmpty()
+    private suspend fun <T> withRetryOn429(block: suspend () -> T): T {
+        var lastRateLimit: HttpException? = null
+        repeat(4) { attempt ->
+            try {
+                return block()
+            } catch (e: HttpException) {
+                if (e.code() == 429) {
+                    lastRateLimit = e
+                    if (attempt < 3) {
+                        delay((1_000L shl attempt) + Random.nextLong(0, 250))
+                    }
+                } else {
+                    throw e
+                }
+            }
+        }
+        lastRateLimit?.let { throw it }
+        throw ExerciseDbRateLimitException()
     }
+
+    suspend fun searchByName(name: String, limit: Int = 25): List<ExerciseDbExerciseDto> =
+        withRetryOn429 {
+            val response = service.searchByName(name, limit)
+            if (!response.success) emptyList() else response.data.orEmpty()
+        }
 
     suspend fun fetchCatalogPage(limit: Int = 50, cursor: String? = null): ExerciseDbListResponse =
-        service.listExercises(limit = limit, cursor = cursor)
+        withRetryOn429 { service.listExercises(limit = limit, cursor = cursor) }
 
-    suspend fun getById(exerciseId: String): ExerciseDbExerciseDto? {
-        val response = service.getById(exerciseId)
-        if (!response.success) return null
-        return response.data
-    }
+    suspend fun getById(exerciseId: String): ExerciseDbExerciseDto? =
+        withRetryOn429 {
+            val response = service.getById(exerciseId)
+            if (!response.success) null else response.data
+        }
 }

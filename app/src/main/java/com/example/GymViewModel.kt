@@ -152,6 +152,7 @@ class GymViewModel(
     val secureStorageManager: com.example.data.SecureStorageManager,
     private val exerciseGuideRepository: com.example.data.ExerciseGuideRepository,
     private val coachHistoryRepository: com.example.data.CoachHistoryRepository,
+    val appUpdateManager: com.example.data.AppUpdateManager,
     private val openRouterApiClient: com.example.data.OpenRouterApiClient = com.example.data.OpenRouterApiClient()
 ) : ViewModel() {
 
@@ -642,6 +643,8 @@ class GymViewModel(
                     _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
                 com.example.data.ExerciseGuideResult.NoOnlineMatch ->
                     _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
+                com.example.data.ExerciseGuideResult.RateLimited ->
+                    _exerciseGuideState.value = ExerciseGuideUiState.RateLimited(exerciseName)
                 is com.example.data.ExerciseGuideResult.Error ->
                     _exerciseGuideState.value = ExerciseGuideUiState.Error(result.message)
             }
@@ -659,6 +662,9 @@ class GymViewModel(
                     _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
                 com.example.data.ExerciseGuideResult.NoOnlineMatch ->
                     _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
+                com.example.data.ExerciseGuideResult.RateLimited ->
+                    _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
+                    else ExerciseGuideUiState.RateLimited(exerciseName)
                 is com.example.data.ExerciseGuideResult.Error ->
                     _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
                     else ExerciseGuideUiState.Error(result.message)
@@ -706,6 +712,58 @@ class GymViewModel(
     }
 
     fun exerciseGuideIsOnline(): Boolean = exerciseGuideRepository.isOnline()
+
+    private val _appUpdateState = MutableStateFlow<AppUpdateUiState>(AppUpdateUiState.Idle)
+    val appUpdateState: StateFlow<AppUpdateUiState> = _appUpdateState.asStateFlow()
+
+    private val _showUpdatePrompt = MutableStateFlow(false)
+    val showUpdatePrompt: StateFlow<Boolean> = _showUpdatePrompt.asStateFlow()
+
+    fun checkForAppUpdate(showUpToDateMessage: Boolean = false, promptIfAvailable: Boolean = false) {
+        viewModelScope.launch {
+            _appUpdateState.value = AppUpdateUiState.Checking
+            when (val result = appUpdateManager.checkForUpdate()) {
+                is com.example.data.UpdateCheckResult.UpToDate ->
+                    _appUpdateState.value = if (showUpToDateMessage) AppUpdateUiState.UpToDate else AppUpdateUiState.Idle
+                is com.example.data.UpdateCheckResult.UpdateAvailable -> {
+                    _appUpdateState.value = AppUpdateUiState.Available(result.info)
+                    if (promptIfAvailable) _showUpdatePrompt.value = true
+                }
+                is com.example.data.UpdateCheckResult.Error ->
+                    _appUpdateState.value = AppUpdateUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun downloadAppUpdate() {
+        val current = _appUpdateState.value
+        val info = when (current) {
+            is AppUpdateUiState.Available -> current.info
+            is AppUpdateUiState.ReadyToInstall -> current.info
+            else -> return
+        }
+        viewModelScope.launch {
+            _appUpdateState.value = AppUpdateUiState.Available(info, downloading = true, progress = 0f)
+            when (val result = appUpdateManager.downloadApk(info.apkUrl) { progress ->
+                _appUpdateState.value = AppUpdateUiState.Available(info, downloading = true, progress = progress)
+            }) {
+                is com.example.data.ApkDownloadResult.Success ->
+                    _appUpdateState.value = AppUpdateUiState.ReadyToInstall(info, result.file)
+                is com.example.data.ApkDownloadResult.Error ->
+                    _appUpdateState.value = AppUpdateUiState.Error(result.message)
+            }
+        }
+    }
+
+    fun createAppUpdateInstallIntent(): android.content.Intent {
+        val state = _appUpdateState.value as? AppUpdateUiState.ReadyToInstall
+            ?: error("No downloaded update")
+        return appUpdateManager.createInstallIntent(state.apkFile)
+    }
+
+    fun dismissUpdatePrompt() {
+        _showUpdatePrompt.value = false
+    }
 
     fun requestExerciseStepsFromCoach(exerciseName: String) {
         _pendingExerciseSteps.value = exerciseName.trim()
@@ -2533,6 +2591,22 @@ class GymViewModel(
     }
 }
 
+sealed class AppUpdateUiState {
+    data object Idle : AppUpdateUiState()
+    data object Checking : AppUpdateUiState()
+    data object UpToDate : AppUpdateUiState()
+    data class Available(
+        val info: com.example.data.AppUpdateInfo,
+        val downloading: Boolean = false,
+        val progress: Float = 0f
+    ) : AppUpdateUiState()
+    data class ReadyToInstall(
+        val info: com.example.data.AppUpdateInfo,
+        val apkFile: java.io.File
+    ) : AppUpdateUiState()
+    data class Error(val message: String) : AppUpdateUiState()
+}
+
 sealed class ExerciseGuideUiState {
     data object Idle : ExerciseGuideUiState()
     data object Loading : ExerciseGuideUiState()
@@ -2542,6 +2616,7 @@ sealed class ExerciseGuideUiState {
     ) : ExerciseGuideUiState()
     data class NoMatch(val exerciseName: String) : ExerciseGuideUiState()
     data class NeedsInternet(val exerciseName: String) : ExerciseGuideUiState()
+    data class RateLimited(val exerciseName: String) : ExerciseGuideUiState()
     data class Error(val message: String) : ExerciseGuideUiState()
 }
 
@@ -2632,7 +2707,8 @@ class GymViewModelFactory(
     private val modelDownloadManager: com.example.data.ModelDownloadManager,
     private val secureStorageManager: com.example.data.SecureStorageManager,
     private val exerciseGuideRepository: com.example.data.ExerciseGuideRepository,
-    private val coachHistoryRepository: com.example.data.CoachHistoryRepository
+    private val coachHistoryRepository: com.example.data.CoachHistoryRepository,
+    private val appUpdateManager: com.example.data.AppUpdateManager
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GymViewModel::class.java)) {
@@ -2640,7 +2716,7 @@ class GymViewModelFactory(
             return GymViewModel(
                 repository, localFoodRepository, localExerciseRepository,
                 offRepository, aiManager, modelDownloadManager, secureStorageManager,
-                exerciseGuideRepository, coachHistoryRepository
+                exerciseGuideRepository, coachHistoryRepository, appUpdateManager
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

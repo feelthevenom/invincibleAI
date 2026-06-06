@@ -5,9 +5,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.example.data.api.ExerciseDbApiClient
 import com.example.data.api.ExerciseDbExerciseDto
+import com.example.data.api.ExerciseDbRateLimitException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,6 +42,7 @@ sealed class ExerciseGuideResult {
     data class Success(val guide: ExerciseGuideDetail) : ExerciseGuideResult()
     data object OfflineNoCache : ExerciseGuideResult()
     data object NoOnlineMatch : ExerciseGuideResult()
+    data object RateLimited : ExerciseGuideResult()
     data class Error(val message: String) : ExerciseGuideResult()
 }
 
@@ -171,9 +171,6 @@ class ExerciseGuideRepository(
         .readTimeout(45, TimeUnit.SECONDS)
         .build()
 
-    private val catalogMutex = Mutex()
-    private var catalogCache: List<ExerciseCatalogEntry>? = null
-
     private val gifDir: File
         get() = File(context.filesDir, "exercise_guides").also { it.mkdirs() }
 
@@ -210,11 +207,9 @@ class ExerciseGuideRepository(
             }
 
             try {
-                val catalog = ensureCatalog()
-                val match = ExerciseNameMatcher.bestMatch(exerciseName, catalog)
+                val full = findExerciseOnline(exerciseName)
                     ?: return@withContext ExerciseGuideResult.NoOnlineMatch
 
-                val full = api.getById(match.exerciseId) ?: return@withContext ExerciseGuideResult.NoOnlineMatch
                 val localPath = downloadGif(full.exerciseId, full.gifUrl)
                 val entity = CachedExerciseGuide(
                     lookupKey = lookupKey,
@@ -230,6 +225,8 @@ class ExerciseGuideRepository(
                 )
                 gymDao.upsertCachedExerciseGuide(entity)
                 ExerciseGuideResult.Success(entity.toDetail(exerciseName, fromCache = false))
+            } catch (_: ExerciseDbRateLimitException) {
+                ExerciseGuideResult.RateLimited
             } catch (e: Exception) {
                 ExerciseGuideResult.Error(e.message ?: "Failed to load exercise tutorial.")
             }
@@ -269,34 +266,21 @@ class ExerciseGuideRepository(
         entity.toDetail(exerciseName, fromCache = false)
     }
 
-    private suspend fun ensureCatalog(): List<ExerciseCatalogEntry> = catalogMutex.withLock {
-        catalogCache?.let { return it }
-        loadCatalogFromDisk()?.let {
-            catalogCache = it
-            return it
+    private suspend fun findExerciseOnline(exerciseName: String): ExerciseDbExerciseDto? {
+        val searchCandidates = api.searchByName(exerciseName).map { dto ->
+            ExerciseCatalogEntry(dto.exerciseId, dto.name, dto.gifUrl)
         }
-        val synced = syncCatalogFromApi()
-        catalogCache = synced
-        synced
-    }
+        ExerciseNameMatcher.bestMatch(exerciseName, searchCandidates)?.let { match ->
+            return api.getById(match.exerciseId)
+        }
 
-    private suspend fun syncCatalogFromApi(): List<ExerciseCatalogEntry> {
-        val all = mutableListOf<ExerciseCatalogEntry>()
-        var cursor: String? = null
-        var pages = 0
-        while (pages < 40) {
-            val page = api.fetchCatalogPage(limit = 50, cursor = cursor)
-            if (!page.success) break
-            page.data.orEmpty().forEach { dto ->
-                all.add(ExerciseCatalogEntry(dto.exerciseId, dto.name, dto.gifUrl))
+        val diskCatalog = loadCatalogFromDisk().orEmpty()
+        if (diskCatalog.isNotEmpty()) {
+            ExerciseNameMatcher.bestMatch(exerciseName, diskCatalog)?.let { match ->
+                return api.getById(match.exerciseId)
             }
-            if (page.meta?.hasNextPage != true) break
-            cursor = page.meta?.nextCursor
-            if (cursor.isNullOrBlank()) break
-            pages++
         }
-        saveCatalogToDisk(all)
-        return all
+        return null
     }
 
     private fun loadCatalogFromDisk(): List<ExerciseCatalogEntry>? {
@@ -318,19 +302,6 @@ class ExerciseGuideRepository(
         } catch (_: Exception) {
             null
         }
-    }
-
-    private fun saveCatalogToDisk(entries: List<ExerciseCatalogEntry>) {
-        val array = JSONArray()
-        entries.forEach { entry ->
-            array.put(
-                JSONObject()
-                    .put("exerciseId", entry.exerciseId)
-                    .put("name", entry.name)
-                    .put("gifUrl", entry.gifUrl)
-            )
-        }
-        catalogFile.writeText(array.toString())
     }
 
     private suspend fun downloadGif(exerciseId: String, url: String): String? {

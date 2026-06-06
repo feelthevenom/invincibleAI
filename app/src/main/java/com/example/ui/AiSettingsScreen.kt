@@ -597,6 +597,9 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     ImportModelCard(onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) })
                 }
             }
+            item {
+                AppUpdateSection(viewModel = viewModel)
+            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
