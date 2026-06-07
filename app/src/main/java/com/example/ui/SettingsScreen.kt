@@ -20,9 +20,15 @@ import com.example.GymViewModel
 import com.example.ui.theme.*
 
 @Composable
-fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
+fun SettingsScreen(
+    viewModel: GymViewModel,
+    onBack: () -> Unit,
+    onOpenWaterReminder: () -> Unit = {},
+    onOpenWorkoutReminder: () -> Unit = {}
+) {
     val profile by viewModel.userProfile.collectAsState()
     val context = LocalContext.current
+    var showThemeSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -48,9 +54,27 @@ fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             item {
                 Text("THEME", style = Typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                ThemeSelectionSection(
+                AppThemeSettingCard(
                     currentMode = profile.themeMode,
-                    onModeSelected = { viewModel.updateThemeMode(it) }
+                    onClick = { showThemeSheet = true }
+                )
+            }
+
+            item {
+                Text("REMINDERS", style = Typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                SettingsActionCard(
+                    title = "Drink Water Reminder",
+                    subtitle = "Hydration alerts and schedule",
+                    icon = Icons.Default.WaterDrop,
+                    onClick = onOpenWaterReminder
+                )
+                Spacer(Modifier.height(10.dp))
+                SettingsActionCard(
+                    title = "Workout Reminder",
+                    subtitle = "Gym alarm and daily schedule",
+                    icon = Icons.Default.FitnessCenter,
+                    onClick = onOpenWorkoutReminder
                 )
             }
 
@@ -74,48 +98,138 @@ fun SettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             }
         }
     }
+
+    if (showThemeSheet) {
+        AppThemeBottomSheet(
+            currentMode = profile.themeMode,
+            onDismiss = { showThemeSheet = false },
+            onModeSelected = {
+                viewModel.updateThemeMode(it)
+                showThemeSheet = false
+            }
+        )
+    }
 }
 
 @Composable
-private fun ThemeSelectionSection(currentMode: String, onModeSelected: (String) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        shape = RoundedCornerShape(14.dp)
+private fun AppThemeSettingCard(currentMode: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val label = themeModeLabel(currentMode)
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = cs.surfaceContainer
     ) {
-        Column(Modifier.padding(4.dp)) {
-            val options = listOf(
-                "system" to "System Default",
-                "light" to "Light Mode",
-                "dark" to "Dark Mode"
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(cs.primary.copy(0.12f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.LightMode, null, tint = cs.primary, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    "App Theme",
+                    style = Typography.titleMedium,
+                    color = cs.onSurface,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Switch between light, dark, or follow system appearance.",
+                style = Typography.bodySmall,
+                color = cs.onSurfaceVariant
+            )
+            Spacer(Modifier.height(14.dp))
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = cs.primary.copy(0.14f)
+            ) {
+                Text(
+                    label,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = Typography.labelLarge,
+                    color = cs.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppThemeBottomSheet(
+    currentMode: String,
+    onDismiss: () -> Unit,
+    onModeSelected: (String) -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val options = listOf(
+        "light" to "Light Theme",
+        "dark" to "Dark Theme",
+        "system" to "Follow System"
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = cs.surfaceContainerHigh,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                "App Theme",
+                style = Typography.titleLarge,
+                color = cs.onSurface,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             options.forEach { (mode, label) ->
                 val selected = currentMode == mode
                 Surface(
                     onClick = { onModeSelected(mode) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (selected) cs.primary else cs.surfaceContainer
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = { onModeSelected(mode) },
-                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
-                        )
-                        Spacer(Modifier.width(12.dp))
                         Text(
                             label,
+                            modifier = Modifier.weight(1f),
                             style = Typography.bodyLarge,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                            color = if (selected) cs.onPrimary else cs.onSurface,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                         )
+                        if (selected) {
+                            Icon(Icons.Default.Check, null, tint = cs.onPrimary)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+private fun themeModeLabel(mode: String): String = when (mode) {
+    "light" -> "Light Theme"
+    "dark" -> "Dark Theme"
+    else -> "Follow System"
 }
 
 @Composable

@@ -66,7 +66,10 @@ class ModelDownloadManager(
         val displayName: String,
         val fileName: String,
         val isBuiltIn: Boolean,
-        val minRamGb: Double
+        val minRamGb: Double,
+        val supportsVision: Boolean = false,
+        val supportsText: Boolean = true,
+        val capabilityLabel: String = "Text"
     )
 
     fun listInstalledModels(): List<InstalledOfflineModel> {
@@ -78,7 +81,18 @@ class ModelDownloadManager(
                 displayName = spec.displayName,
                 fileName = spec.fileName,
                 isBuiltIn = true,
-                minRamGb = spec.minRamGb
+                minRamGb = spec.minRamGb,
+                supportsVision = spec.supportsVision,
+                supportsText = true,
+                capabilityLabel = OfflineModelValidator.capabilityLabel(
+                    OfflineModelValidator.ModelCapabilities(
+                        supportsVision = spec.supportsVision,
+                        supportsText = true,
+                        displayName = spec.displayName,
+                        minRamGb = spec.minRamGb,
+                        isBuiltIn = true
+                    )
+                )
             )
         }
         val imported = modelsDir.listFiles()
@@ -89,12 +103,16 @@ class ModelDownloadManager(
                     OfflineModelConfig.isValidImportedFile(file.length())
             }
             ?.map { file ->
+                val cap = OfflineModelValidator.inferCapabilities(file.name, file.length())
                 InstalledOfflineModel(
                     id = OfflineModelConfig.importedId(file.name),
-                    displayName = file.name.removeSuffix(".litertlm").removeSuffix(".LITERTLM"),
+                    displayName = cap.displayName,
                     fileName = file.name,
                     isBuiltIn = false,
-                    minRamGb = 4.0
+                    minRamGb = cap.minRamGb,
+                    supportsVision = cap.supportsVision,
+                    supportsText = cap.supportsText,
+                    capabilityLabel = OfflineModelValidator.capabilityLabel(cap)
                 )
             }
             .orEmpty()
@@ -261,11 +279,13 @@ class ModelDownloadManager(
                 if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
             } ?: "imported-model.litertlm"
 
-            val fileName = when {
-                rawName.endsWith(".litertlm", ignoreCase = true) -> rawName
-                else -> "$rawName.litertlm"
-            }.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            if (!rawName.endsWith(".litertlm", ignoreCase = true)) {
+                return@withContext DownloadStatus.Error(
+                    "Unsupported file. Import a .litertlm LiteRT-LM model only (not .bin or other formats)."
+                )
+            }
 
+            val fileName = rawName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             val dest = File(modelsDir, fileName)
             val temp = File(modelsDir, "$fileName.import")
 
@@ -273,11 +293,19 @@ class ModelDownloadManager(
                 FileOutputStream(temp).use { output -> input.copyTo(output) }
             } ?: return@withContext DownloadStatus.Error("Cannot read selected file")
 
-            if (!OfflineModelConfig.isValidImportedFile(temp.length())) {
-                temp.delete()
-                return@withContext DownloadStatus.Error(
-                    "Invalid model file (${temp.length() / 1_000_000} MB). Expected a .litertlm model."
-                )
+            when (val validation = OfflineModelValidator.validateImportedFile(appContext, temp)) {
+                is OfflineModelValidator.ValidationResult.Invalid -> {
+                    temp.delete()
+                    return@withContext DownloadStatus.Error(validation.message)
+                }
+                is OfflineModelValidator.ValidationResult.Valid -> {
+                    if (validation.capabilities.minRamGb > getTotalRamGb()) {
+                        temp.delete()
+                        return@withContext DownloadStatus.Error(
+                            "Device needs at least ${validation.capabilities.minRamGb} GB RAM for this model."
+                        )
+                    }
+                }
             }
 
             if (dest.exists()) dest.delete()
@@ -334,6 +362,12 @@ class ModelDownloadManager(
         File(modelsDir, "gemma-4b.bin").delete()
         File(modelsDir, "gemma-3n-E2B-it-int4.litertlm").delete()
         File(modelsDir, "gemma-3n-E4B-it-int4.litertlm").delete()
+    }
+
+    suspend fun validateInstalledModel(modelId: String): OfflineModelValidator.ValidationResult {
+        val file = resolveModelFile(modelId)
+            ?: return OfflineModelValidator.ValidationResult.Invalid("Model file missing.")
+        return OfflineModelValidator.validateImportedFile(appContext, file)
     }
 
     companion object {

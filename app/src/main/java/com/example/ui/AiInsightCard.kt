@@ -12,10 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.CoachInsight
 import com.example.ui.theme.*
@@ -40,23 +37,9 @@ fun AiCoachInsightCard(insight: CoachInsight, modifier: Modifier = Modifier) {
             )
         }
         Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = buildAnnotatedString {
-                val body = insight.body
-                val highlight = insight.highlight
-                if (highlight != null && body.contains(highlight, ignoreCase = true)) {
-                    val start = body.indexOf(highlight, ignoreCase = true)
-                    if (start >= 0) {
-                        append(body.substring(0, start))
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)) {
-                            append(body.substring(start, start + highlight.length))
-                        }
-                        append(body.substring(start + highlight.length))
-                    } else append(body)
-                } else append(body)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+        TypewriterInsightText(
+            targetText = insight.body,
+            highlight = insight.highlight
         )
     }
 }

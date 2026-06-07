@@ -1,5 +1,11 @@
 package com.example.ui
 
+import android.app.Activity
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
@@ -40,6 +47,24 @@ fun WorkoutReminderScreen(
 
     var repeatDaily by remember(profile.workoutReminderRepeat) {
         mutableStateOf(profile.workoutReminderRepeat)
+    }
+
+    val alarmSoundLabel = remember(profile.workoutAlarmSoundUri) {
+        resolveAlarmSoundLabel(context, profile.workoutAlarmSoundUri)
+    }
+
+    val ringtonePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        }
+        viewModel.saveWorkoutAlarmSound(uri?.toString().orEmpty())
+        WorkoutNotificationHelper.createChannel(context, uri)
     }
 
     Scaffold(
@@ -127,6 +152,50 @@ fun WorkoutReminderScreen(
                 }
             }
 
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "ALARM SOUND",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = cs.primary,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+                Text(
+                    "Workout reminders use an alarm with sound and vibration. Hydration uses quiet notifications only.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+                Surface(
+                    onClick = {
+                        val intent = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select workout alarm")
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                            if (profile.workoutAlarmSoundUri.isNotBlank()) {
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(profile.workoutAlarmSoundUri))
+                            }
+                        }
+                        ringtonePicker.launch(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = cs.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.MusicNote, null, tint = cs.primary)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Alarm tone", style = MaterialTheme.typography.titleSmall, color = cs.onSurface)
+                            Text(alarmSoundLabel, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = {
@@ -152,6 +221,15 @@ fun WorkoutReminderScreen(
                 Text("Cancel")
             }
         }
+    }
+}
+
+private fun resolveAlarmSoundLabel(context: android.content.Context, uriString: String): String {
+    if (uriString.isBlank()) return "System default alarm"
+    return try {
+        RingtoneManager.getRingtone(context, Uri.parse(uriString))?.getTitle(context) ?: "Custom alarm"
+    } catch (_: Exception) {
+        "Custom alarm"
     }
 }
 

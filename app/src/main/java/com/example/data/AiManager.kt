@@ -7,6 +7,9 @@ import com.example.BuildConfig
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -565,6 +568,14 @@ class AiManager(
             offlineEngine.generate(prompt, modelFile.absolutePath, image)
         }
 
+    private suspend fun callOfflineStream(prompt: String, offlineModelId: String): Flow<String> {
+        val installed = modelDownloadManager.listInstalledModels().find { it.id == offlineModelId }
+            ?: throw IllegalStateException("Select a downloaded or imported offline model in AI Settings.")
+        val modelFile = modelDownloadManager.resolveModelFile(offlineModelId)
+            ?: throw IllegalStateException("Model file missing for ${installed.displayName}")
+        return offlineEngine.generateStream(prompt, modelFile.absolutePath, null)
+    }
+
     // ── Utilities ─────────────────────────────────────────────────────
 
     private fun scaleForVision(source: Bitmap, provider: String, offlineModelId: String, maxSide: Int = 1024): Bitmap {
@@ -825,6 +836,200 @@ class AiManager(
         }
         return runPromptRaw(prompt, provider, modelId, offlineModelId)
     }
+
+    fun generateCoachChatReplyStream(
+        userContext: String,
+        conversationHistory: List<Pair<String, String>>,
+        userMessage: String,
+        provider: String,
+        modelId: String,
+        offlineModelId: String
+    ): Flow<String> {
+        val prompt = buildCoachChatPrompt(userContext, conversationHistory, userMessage, provider)
+        return when (provider) {
+            "offline" -> flow {
+                try {
+                    offlineEngineLock.withLock {
+                        callOfflineStream(prompt, offlineModelId).collect { chunk -> emit(chunk) }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Offline coach stream failed", e)
+                }
+            }
+            "gemini" -> streamGeminiCoach(prompt, modelId)
+            "groq" -> streamGroqCoach(prompt, modelId)
+            "openrouter" -> streamOpenRouterCoach(prompt, modelId)
+            else -> flow {
+                runPromptRaw(prompt, provider, modelId, offlineModelId)?.let { emit(it) }
+            }
+        }
+    }
+
+    private fun buildCoachChatPrompt(
+        userContext: String,
+        conversationHistory: List<Pair<String, String>>,
+        userMessage: String,
+        provider: String
+    ): String {
+        val historyBlock = if (conversationHistory.isEmpty()) "" else {
+            conversationHistory.takeLast(6).joinToString("\n") { (role, text) ->
+                val label = if (role == "user") "User" else "Coach"
+                "$label: ${text.take(280)}"
+            }
+        }
+        val contextForPrompt = if (provider == "offline") {
+            userContext.lines().filter { it.isNotBlank() }.take(10).joinToString("\n").take(1400)
+        } else {
+            userContext
+        }
+        return if (provider == "offline") {
+            """
+            You are Coach AI — a fitness and nutrition coach in a mobile app.
+            Answer briefly (2-3 short paragraphs). Use numbers from USER DATA when relevant.
+            Do not mention being an AI model.
+            
+            USER DATA:
+            $contextForPrompt
+            
+            ${if (historyBlock.isNotBlank()) "CONVERSATION:\n$historyBlock\n" else ""}
+            User: $userMessage
+            Coach:
+            """.trimIndent()
+        } else {
+            """
+            You are Coach AI — a personal fitness and nutrition coach inside the GYM AI mobile app.
+            Answer questions about diet, macros, meal planning, workouts, exercise form, programming, recovery, and gym training.
+            
+            RULES:
+            - Be conversational, supportive, and practical (2-5 short paragraphs max unless listing exercises).
+            - Reference specific numbers from USER DATA when relevant.
+            - Use **double asterisks** around key phrases for emphasis.
+            - Do NOT invent data not in USER DATA.
+            - Never mention being an AI model unless asked.
+            
+            USER DATA:
+            $contextForPrompt
+            
+            ${if (historyBlock.isNotBlank()) "CONVERSATION SO FAR:\n$historyBlock\n" else ""}
+            User: $userMessage
+            Coach:
+            """.trimIndent()
+        }
+    }
+
+    private fun streamGroqCoach(prompt: String, modelId: String): Flow<String> = flow {
+        val apiKey = resolveGroqApiKey()
+            ?: throw IllegalStateException("Groq API key not configured.")
+        val model = AiProviderConfig.resolveGroqModelId(modelId)
+        val body = JSONObject().apply {
+            put("model", model)
+            put("stream", true)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", prompt)
+                })
+            })
+            put("temperature", 0.3)
+            put("max_tokens", 1024)
+        }
+        streamOpenAiSse(GROQ_BASE_URL, body, apiKey).collect { emit(it) }
+    }
+
+    private fun streamOpenRouterCoach(prompt: String, modelId: String): Flow<String> = flow {
+        val apiKey = secureStorageManager.getOpenRouterApiKey()?.trim().orEmpty()
+            .takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("OpenRouter API key not configured.")
+        val model = AiProviderConfig.resolveOpenRouterModelId(modelId)
+        val body = JSONObject().apply {
+            put("model", model)
+            put("stream", true)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", prompt)
+                })
+            })
+            put("temperature", 0.3)
+            put("max_tokens", 1024)
+        }
+        streamOpenAiSse("$OPENROUTER_BASE/chat/completions", body, apiKey).collect { emit(it) }
+    }
+
+    private fun streamGeminiCoach(prompt: String, modelId: String): Flow<String> = flow {
+        val apiKey = resolveGeminiApiKey()
+            ?: throw IllegalStateException("Gemini API key not configured.")
+        val model = AiProviderConfig.resolveGeminiModelId(modelId)
+        val url = "$GEMINI_REST_BASE/models/$model:streamGenerateContent?alt=sse&key=$apiKey"
+        val body = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", prompt) })
+                    })
+                })
+            })
+        }
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException(parseGeminiErrorMessage(response.code, response.body?.string().orEmpty()))
+            }
+            response.body?.byteStream()?.bufferedReader()?.useLines { lines ->
+                lines.forEach { line ->
+                    if (!line.startsWith("data: ")) return@forEach
+                    val payload = line.removePrefix("data: ").trim()
+                    if (payload.isEmpty()) return@forEach
+                    try {
+                        val json = JSONObject(payload)
+                        val text = json.optJSONArray("candidates")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("content")
+                            ?.optJSONArray("parts")
+                            ?.optJSONObject(0)
+                            ?.optString("text")
+                        if (!text.isNullOrEmpty()) emit(text)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun streamOpenAiSse(url: String, body: JSONObject, apiKey: String): Flow<String> = flow {
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val err = response.body?.string().orEmpty()
+                throw IllegalStateException("Stream failed (HTTP ${response.code}): $err")
+            }
+            response.body?.byteStream()?.bufferedReader()?.useLines { lines ->
+                lines.forEach { line ->
+                    if (!line.startsWith("data: ")) return@forEach
+                    val payload = line.removePrefix("data: ").trim()
+                    if (payload == "[DONE]") return@forEach
+                    try {
+                        val json = JSONObject(payload)
+                        val delta = json.optJSONArray("choices")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("delta")
+                            ?.optString("content")
+                        if (!delta.isNullOrEmpty()) emit(delta)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
 
     suspend fun generateExerciseSteps(
         exerciseName: String,

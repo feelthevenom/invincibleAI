@@ -1,0 +1,7 @@
+{
+  "versionCode": 3,
+  "versionName": "v1.0.0",
+  "apkUrl": "https://github.com/feelthevenom/invincibleAI/releases/download/v1.0.0/GymAI.apk",
+  "releaseNotes": "Exercise tutorial rate-limit fix, GitHub in-app updates, cardio tracking improvements, and bug fixes.",
+  "minVersionCode": 1
+}

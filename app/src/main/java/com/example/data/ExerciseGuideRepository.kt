@@ -58,6 +58,20 @@ data class ExerciseCatalogEntry(
 
 object ExerciseNameMatcher {
     private val stopWords = setOf("the", "a", "an", "with", "on", "in", "and", "or", "male", "female")
+    private val abbreviations = mapOf(
+        "db" to "dumbbell",
+        "bb" to "barbell",
+        "bw" to "bodyweight",
+        "ohp" to "overhead press",
+        "rdl" to "romanian deadlift",
+        "cgbp" to "close grip bench press"
+    )
+
+    fun expandAbbreviations(name: String): String {
+        val tokens = normalize(name).split(" ").filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return name
+        return tokens.joinToString(" ") { abbreviations[it] ?: it }
+    }
 
     fun normalize(name: String): String =
         name.lowercase()
@@ -78,9 +92,10 @@ object ExerciseNameMatcher {
         val cTokens = tokens(candidate).toSet()
         if (qTokens.isEmpty()) return 0
 
-        // Every query token must appear in the candidate name.
-        val allPresent = qTokens.all { qt ->
-            cTokens.any { ct -> ct == qt || (qt.length >= 4 && (ct.contains(qt) || qt.contains(ct))) }
+        // Every query token must appear in the candidate name (abbreviations expanded for matching).
+        val expandedTokens = qTokens.map { abbreviations[it] ?: it }
+        val allPresent = expandedTokens.all { qt ->
+            cTokens.any { ct -> ct == qt || (qt.length >= 3 && (ct.contains(qt) || qt.contains(ct))) }
         }
         if (!allPresent) return 0
 
@@ -102,11 +117,11 @@ object ExerciseNameMatcher {
         return score
     }
 
-    fun bestMatch(query: String, candidates: List<ExerciseCatalogEntry>): ExerciseCatalogEntry? {
+    fun bestMatch(query: String, candidates: List<ExerciseCatalogEntry>, minScore: Int = 80): ExerciseCatalogEntry? {
         if (candidates.isEmpty()) return null
         return candidates
             .map { it to score(query, it.name) }
-            .filter { it.second >= 80 }
+            .filter { it.second >= minScore }
             .maxByOrNull { it.second }
             ?.first
     }
@@ -168,7 +183,8 @@ object ExerciseStepFormatter {
 class ExerciseGuideRepository(
     private val context: Context,
     private val gymDao: GymDao,
-    private val api: ExerciseDbApiClient = ExerciseDbApiClient()
+    private val api: ExerciseDbApiClient = ExerciseDbApiClient(),
+    private val localExercises: LocalExerciseRepository = LocalExerciseRepository(context)
 ) {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(25, TimeUnit.SECONDS)
@@ -185,8 +201,7 @@ class ExerciseGuideRepository(
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(network) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     suspend fun loadGuide(exerciseName: String, forceOnline: Boolean = false): ExerciseGuideResult =
@@ -285,20 +300,41 @@ class ExerciseGuideRepository(
     }
 
     private suspend fun findExerciseOnline(exerciseName: String): ExerciseDbExerciseDto? {
-        val searchCandidates = api.searchByName(exerciseName).map { dto ->
-            ExerciseCatalogEntry(dto.exerciseId, dto.name, dto.gifUrl)
-        }
-        ExerciseNameMatcher.bestMatch(exerciseName, searchCandidates)?.let { match ->
-            return api.getById(match.exerciseId)
+        for (query in buildSearchQueries(exerciseName)) {
+            val results = api.searchByName(query)
+            pickFromApiResults(exerciseName, results)?.let { return it }
+            val altResults = api.searchByQuery(query)
+            pickFromApiResults(exerciseName, altResults)?.let { return it }
         }
 
         val diskCatalog = loadCatalogFromDisk().orEmpty()
         if (diskCatalog.isNotEmpty()) {
-            ExerciseNameMatcher.bestMatch(exerciseName, diskCatalog)?.let { match ->
-                return api.getById(match.exerciseId)
+            ExerciseNameMatcher.bestMatch(exerciseName, diskCatalog, minScore = 60)?.let { match ->
+                api.getById(match.exerciseId)?.let { return it }
             }
         }
         return null
+    }
+
+    private fun buildSearchQueries(exerciseName: String): List<String> {
+        val queries = linkedSetOf(exerciseName.trim(), ExerciseNameMatcher.expandAbbreviations(exerciseName))
+        localExercises.findByNameOrAlias(exerciseName)?.let { bundled ->
+            queries.add(bundled.name)
+            bundled.aliases.forEach { queries.add(it) }
+        }
+        return queries.filter { it.isNotBlank() }
+    }
+
+    private fun pickFromApiResults(
+        exerciseName: String,
+        results: List<ExerciseDbExerciseDto>
+    ): ExerciseDbExerciseDto? {
+        if (results.isEmpty()) return null
+        val candidates = results.map { ExerciseCatalogEntry(it.exerciseId, it.name, it.gifUrl) }
+        val bestEntry = ExerciseNameMatcher.bestMatch(exerciseName, candidates, minScore = 60)
+            ?: candidates.firstOrNull()
+        return bestEntry?.let { entry -> results.find { it.exerciseId == entry.exerciseId } }
+            ?: results.first()
     }
 
     private fun loadCatalogFromDisk(): List<ExerciseCatalogEntry>? {

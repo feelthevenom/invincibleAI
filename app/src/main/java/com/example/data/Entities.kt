@@ -61,6 +61,7 @@ data class UserProfile(
     val workoutReminderEnabled: Boolean = false,
     val workoutReminderTimeMinute: Int = 6 * 60 + 30,
     val workoutReminderRepeat: Boolean = true,
+    val workoutAlarmSoundUri: String = "", // empty = system default alarm
     val themeMode: String = "system", // system | light | dark
     val notificationsLastViewedAt: Long = 0L
 )

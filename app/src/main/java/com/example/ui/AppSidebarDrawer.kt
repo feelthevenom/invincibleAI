@@ -90,12 +90,6 @@ fun AppSidebarDrawer(
                 )
                 
                 Spacer(Modifier.weight(1f))
-                Text(
-                    "v2.4.0 • Pro Member",
-                    modifier = Modifier.padding(24.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         },
         content = content

@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.gymai.qxzpvw"
     minSdk = 24
     targetSdk = 37
-    versionCode = 3
-    versionName = "v1.0.0"
+    versionCode = 4
+    versionName = "v1.0.1"
 
     buildConfigField(
       "String",
