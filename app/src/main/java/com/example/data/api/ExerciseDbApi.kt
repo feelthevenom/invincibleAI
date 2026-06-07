@@ -62,6 +62,12 @@ interface ExerciseDbService {
         @Query("limit") limit: Int = 25
     ): ExerciseDbListResponse
 
+    @GET("api/v1/exercises")
+    suspend fun searchByQuery(
+        @Query("search") search: String,
+        @Query("limit") limit: Int = 25
+    ): ExerciseDbListResponse
+
     @GET("api/v1/exercises/{exerciseId}")
     suspend fun getById(@Path("exerciseId") exerciseId: String): ExerciseDbSingleResponse
 }
@@ -106,6 +112,12 @@ class ExerciseDbApiClient {
     suspend fun searchByName(name: String, limit: Int = 25): List<ExerciseDbExerciseDto> =
         withRetryOn429 {
             val response = service.searchByName(name, limit)
+            if (!response.success) emptyList() else response.data.orEmpty()
+        }
+
+    suspend fun searchByQuery(query: String, limit: Int = 25): List<ExerciseDbExerciseDto> =
+        withRetryOn429 {
+            val response = service.searchByQuery(query, limit)
             if (!response.success) emptyList() else response.data.orEmpty()
         }
 

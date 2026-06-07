@@ -29,7 +29,6 @@ import com.example.data.UserProfile
 import com.example.data.WaterGoalCalculator
 import com.example.data.WaterReminderModes
 import com.example.notifications.WaterNotificationHelper
-import com.example.ui.theme.*
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +39,7 @@ fun WaterReminderSettingsScreen(
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     val goalGlasses = viewModel.effectiveWaterGoalGlasses()
 
     var enabled by remember(profile) { mutableStateOf(profile.waterReminderEnabled) }
@@ -122,10 +122,10 @@ fun WaterReminderSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Drink Water Reminder", style = Typography.titleMedium) },
+                title = { Text("Drink Water Reminder", style = MaterialTheme.typography.titleMedium, color = cs.primary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = cs.onSurface)
                     }
                 },
                 actions = {
@@ -140,18 +140,18 @@ fun WaterReminderSettingsScreen(
                         }
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = cs.background)
             )
         },
         bottomBar = {
             Button(
                 onClick = { saveSettings() },
                 modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-                shape = MaterialTheme.shapes.medium,
-                colors = ButtonDefaults.buttonColors(containerColor = OnSurface, contentColor = Background)
-            ) { Text("SAVE", fontWeight = FontWeight.Bold) }
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = ButtonDefaults.buttonColors(containerColor = cs.primary, contentColor = cs.onPrimary)
+            ) { Text("Save reminder", fontWeight = FontWeight.Bold) }
         },
-        containerColor = Background
+        containerColor = cs.background
     ) { padding ->
         Column(
             Modifier
@@ -160,12 +160,12 @@ fun WaterReminderSettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
         ) {
-            Text("Get reminded to drink water", style = Typography.titleMedium, fontWeight = FontWeight.Bold, color = OnSurface)
+            Text("Get reminded to drink water", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = cs.onSurface)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Water reminders help you meet your hydration goal of a minimum of $goalGlasses glasses (${WaterGoalCalculator.formatLiters(goalGlasses * WaterGoalCalculator.ML_PER_GLASS)}L) a day.",
-                style = Typography.bodyMedium,
-                color = OnSurfaceVariant
+                style = MaterialTheme.typography.bodyMedium,
+                color = cs.onSurfaceVariant
             )
             Spacer(Modifier.height(20.dp))
 
@@ -176,7 +176,7 @@ fun WaterReminderSettingsScreen(
                 onEndClick = { if (enabled) showEndTimePicker = true }
             )
 
-            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = OutlineVariant.copy(0.3f))
+            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = cs.outlineVariant.copy(0.3f))
 
             ReminderOptionRow(
                 label = WaterReminderModes.label(WaterReminderModes.INTERVAL),
@@ -215,8 +215,8 @@ fun WaterReminderSettingsScreen(
                 Spacer(Modifier.height(16.dp))
                 Text(
                     "Allow Alarms & reminders for precise scheduling. Without it, basic notifications will be used.",
-                    style = Typography.bodySmall,
-                    color = Tertiary
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.tertiary
                 )
                 TextButton(onClick = { requestExactAlarmIfNeeded() }) {
                     Text("Open alarm settings")
@@ -286,11 +286,12 @@ private fun ReminderTimeRow(
     onStartClick: () -> Unit,
     onEndClick: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = Typography.bodyLarge, color = if (enabled) OnSurface else OnSurfaceVariant.copy(0.5f))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (enabled) cs.onSurface else cs.onSurfaceVariant.copy(0.5f))
     }
 }
 
@@ -303,6 +304,7 @@ private fun ReminderOptionRow(
     onSelect: () -> Unit,
     onValueClick: () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
     val active = enabled && selected
     Row(
         Modifier
@@ -312,9 +314,9 @@ private fun ReminderOptionRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(selected = selected, onClick = null, enabled = enabled)
-        Text(label, style = Typography.bodyLarge, color = if (enabled) OnSurface else OnSurfaceVariant.copy(0.5f), modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (enabled) cs.onSurface else cs.onSurfaceVariant.copy(0.5f), modifier = Modifier.weight(1f))
         TextButton(onClick = onValueClick, enabled = active) {
-            Text(value, fontWeight = FontWeight.Bold, color = if (active) Primary else OnSurfaceVariant)
+            Text(value, fontWeight = FontWeight.Bold, color = if (active) cs.primary else cs.onSurfaceVariant)
         }
     }
 }
@@ -331,20 +333,21 @@ private fun NumberWheelDialog(
     onSave: (Int) -> Unit
 ) {
     var current by remember { mutableIntStateOf(selected) }
+    val cs = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column {
-                Text(subtitle, style = Typography.bodySmall, color = OnSurfaceVariant)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         values.forEach { v ->
                             Text(
                                 formatValue(v),
-                                style = if (v == current) Typography.titleLarge else Typography.bodyMedium,
-                                color = if (v == current) OnSurface else OnSurfaceVariant.copy(0.4f),
+                                style = if (v == current) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyMedium,
+                                color = if (v == current) cs.onSurface else cs.onSurfaceVariant.copy(0.4f),
                                 modifier = Modifier
                                     .padding(vertical = 4.dp)
                                     .then(Modifier)
@@ -352,7 +355,7 @@ private fun NumberWheelDialog(
                         }
                     }
                     Spacer(Modifier.width(8.dp))
-                    Text(suffix, style = Typography.titleMedium, color = OnSurfaceVariant)
+                    Text(suffix, style = MaterialTheme.typography.titleMedium, color = cs.onSurfaceVariant)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     values.forEach { v ->
@@ -396,6 +399,7 @@ private fun WeekDayPickerDialog(
         Calendar.SATURDAY to "Saturday"
     )
     var current by remember { mutableIntStateOf(selectedDay) }
+    val cs = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Remind me every week on") },
@@ -410,13 +414,14 @@ private fun WeekDayPickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = current == day, onClick = null)
-                        Text(label)
+                        Text(label, color = cs.onSurface)
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = { onSave(current) }) { Text("SAVE") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } },
+        containerColor = cs.surfaceContainerHigh
     )
 }
 

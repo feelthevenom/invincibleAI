@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -40,38 +41,68 @@ class AppUpdateManager(private val context: Context) {
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
+    private val manifestUrls: List<String> = buildList {
+        val configured = BuildConfig.UPDATE_MANIFEST_URL.trim()
+        if (configured.isNotBlank() && configured != "https://example.com/version.json") {
+            add(configured)
+        }
+        add("https://raw.githubusercontent.com/feelthevenom/invincibleAI/main/app/version.json")
+        add("https://raw.githubusercontent.com/feelthevenom/invincibleAI/master/app/version.json")
+    }.distinct()
+
     suspend fun checkForUpdate(): UpdateCheckResult = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder()
-                .url(BuildConfig.UPDATE_MANIFEST_URL)
-                .get()
-                .build()
+        val bundled = readBundledManifest()
+        if (bundled != null && bundled !is UpdateCheckResult.Error) {
+            return@withContext bundled
+        }
+        var lastError: String? = null
+        for (url in manifestUrls) {
+            when (val result = fetchManifest(url)) {
+                is UpdateCheckResult.Error -> lastError = result.message
+                else -> return@withContext result
+            }
+        }
+        bundled ?: UpdateCheckResult.Error(lastError ?: "Could not check for updates.")
+    }
+
+    private fun fetchManifest(url: String): UpdateCheckResult {
+        return try {
+            val request = Request.Builder().url(url).get().build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return@withContext UpdateCheckResult.Error(
-                        "Could not check for updates (HTTP ${response.code})."
-                    )
+                    return UpdateCheckResult.Error("Could not check for updates (HTTP ${response.code}).")
                 }
-                val body = response.body?.string().orEmpty()
-                if (body.isBlank()) {
-                    return@withContext UpdateCheckResult.Error("Update manifest was empty.")
-                }
-                val json = JSONObject(body)
-                val info = AppUpdateInfo(
-                    versionCode = json.getInt("versionCode"),
-                    versionName = json.optString("versionName", ""),
-                    apkUrl = json.getString("apkUrl"),
-                    releaseNotes = json.optString("releaseNotes", ""),
-                    minVersionCode = json.optInt("minVersionCode", 1)
-                )
-                if (info.versionCode > BuildConfig.VERSION_CODE) {
-                    UpdateCheckResult.UpdateAvailable(info)
-                } else {
-                    UpdateCheckResult.UpToDate
-                }
+                parseManifestBody(response.body?.string().orEmpty())
             }
         } catch (e: Exception) {
             UpdateCheckResult.Error(e.message ?: "Update check failed.")
+        }
+    }
+
+    private fun readBundledManifest(): UpdateCheckResult? = try {
+        val json = context.assets.open("version.json").bufferedReader().use { it.readText() }
+        when (val parsed = parseManifestBody(json)) {
+            is UpdateCheckResult.Error -> null
+            else -> parsed
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun parseManifestBody(body: String): UpdateCheckResult {
+        if (body.isBlank()) return UpdateCheckResult.Error("Update manifest was empty.")
+        val json = JSONObject(body)
+        val info = AppUpdateInfo(
+            versionCode = json.getInt("versionCode"),
+            versionName = json.optString("versionName", ""),
+            apkUrl = json.getString("apkUrl"),
+            releaseNotes = json.optString("releaseNotes", ""),
+            minVersionCode = json.optInt("minVersionCode", 1)
+        )
+        return if (info.versionCode > BuildConfig.VERSION_CODE) {
+            UpdateCheckResult.UpdateAvailable(info)
+        } else {
+            UpdateCheckResult.UpToDate
         }
     }
 
@@ -127,7 +158,7 @@ class AppUpdateManager(private val context: Context) {
     }
 
     fun openInstallPermissionSettings(): Intent =
-        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
             data = Uri.parse("package:${context.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

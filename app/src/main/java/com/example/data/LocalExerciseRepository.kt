@@ -55,6 +55,15 @@ class LocalExerciseRepository(context: Context) {
     fun findByName(name: String): ExerciseItem? =
         allExercises.find { it.name.equals(name, ignoreCase = true) }
 
+    fun findByNameOrAlias(name: String): ExerciseItem? {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return null
+        return allExercises.find { exercise ->
+            exercise.name.equals(trimmed, ignoreCase = true) ||
+                exercise.aliases.any { it.equals(trimmed, ignoreCase = true) }
+        }
+    }
+
     fun suggestions(routine: String, limit: Int = 12): List<ExerciseItem> =
         forRoutine(routine).take(limit)
 

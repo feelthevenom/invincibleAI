@@ -25,14 +25,22 @@ import com.example.ui.GymLoadingIndicator
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class BackupRestoreActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val app = application as GymApplication
+        val themeMode = runBlocking {
+            app.repository.userProfile.first()?.themeMode ?: "system"
+        }
         setContent {
-            MyApplicationTheme {
+            MyApplicationTheme(
+                themeMode = themeMode,
+                dynamicColor = themeMode == "system"
+            ) {
                 BackupRestoreScreen(
                     onBack = { finish() },
                     onExport = { uri, onResult ->

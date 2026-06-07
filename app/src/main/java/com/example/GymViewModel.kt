@@ -36,6 +36,7 @@ import com.example.data.WorkoutStatsCalculator
 import com.example.data.api.OpenFoodFactsRepository
 import android.net.Uri
 import com.example.data.AiStatus
+import com.example.data.OfflineModelValidator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -68,7 +69,8 @@ data class AiSettingsUiState(
     val isDownloading2B: Boolean = false,
     val isDownloading4B: Boolean = false,
     val openRouterModelsLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val modelWarning: String? = null
 )
 
 data class ExerciseSearchUiState(
@@ -291,6 +293,10 @@ class GymViewModel(
         saveProfile(current.copy(themeMode = mode))
     }
 
+    fun saveWorkoutAlarmSound(uri: String) {
+        saveProfile(userProfile.value.copy(workoutAlarmSoundUri = uri))
+    }
+
     private fun applyAiProviderChange(current: UserProfile, provider: String): UserProfile {
         if (provider == "offline") {
             return current.copy(
@@ -403,12 +409,12 @@ class GymViewModel(
                     aiManager.releaseOfflineEngine()
                     bumpModelsRevision()
                     modelDownloadManager.listInstalledModels().lastOrNull()?.let { imported ->
-                        updateOfflineModelId(imported.id)
+                        selectOfflineModel(imported.id)
                     }
                     _aiSettingsState.update { it.copy(error = null) }
                 }
                 is com.example.data.DownloadStatus.Error -> {
-                    _aiSettingsState.update { it.copy(error = result.message) }
+                    _aiSettingsState.update { it.copy(modelWarning = result.message, error = null) }
                 }
                 else -> Unit
             }
@@ -424,7 +430,7 @@ class GymViewModel(
                     _aiSettingsState.update { it.copy(error = null) }
                 }
                 is com.example.data.DownloadStatus.Error -> {
-                    _aiSettingsState.update { it.copy(error = result.message) }
+                    _aiSettingsState.update { it.copy(modelWarning = result.message, error = null) }
                 }
                 else -> Unit
             }
@@ -544,6 +550,46 @@ class GymViewModel(
         saveProfile(current.copy(offlineModelId = offlineModelId))
         bumpModelsRevision()
         bumpAiConfigRevision()
+    }
+
+    fun selectOfflineModel(modelId: String) {
+        if (!modelDownloadManager.isModelInstalled(modelId)) {
+            _aiSettingsState.update {
+                it.copy(modelWarning = "Model is not installed. Download or import it first.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            if (modelDownloadManager.resolveModelFile(modelId) == null) {
+                _aiSettingsState.update {
+                    it.copy(modelWarning = "Model file missing. Re-download or re-import the model.")
+                }
+                return@launch
+            }
+            if (modelId.startsWith("imported:")) {
+                when (val result = modelDownloadManager.validateInstalledModel(modelId)) {
+                    is OfflineModelValidator.ValidationResult.Invalid -> {
+                        _aiSettingsState.update { it.copy(modelWarning = result.message) }
+                        return@launch
+                    }
+                    is OfflineModelValidator.ValidationResult.Valid -> {
+                        if (result.capabilities.minRamGb > modelDownloadManager.getTotalRamGb()) {
+                            _aiSettingsState.update {
+                                it.copy(modelWarning = "Device needs at least ${result.capabilities.minRamGb} GB RAM for this model.")
+                            }
+                            return@launch
+                        }
+                    }
+                }
+            }
+            aiManager.releaseOfflineEngine()
+            updateOfflineModelId(modelId)
+            _aiSettingsState.update { it.copy(modelWarning = null, error = null) }
+        }
+    }
+
+    fun clearModelWarning() {
+        _aiSettingsState.update { it.copy(modelWarning = null) }
     }
 
     fun setGeminiApiKey(key: String) {
@@ -1019,19 +1065,47 @@ class GymViewModel(
                 }
             val context = buildCoachChatContext()
             val textSlot = AiRouteResolver.textSlot(profile)
-            val reply = if (isAiConfigured()) {
-                aiManager.generateCoachChatReply(
-                    userContext = context,
-                    conversationHistory = history,
-                    userMessage = trimmed,
-                    provider = textSlot.provider,
-                    modelId = textSlot.modelId,
-                    offlineModelId = textSlot.offlineModelId
-                )
-            } else null
-            val responseText = reply?.trim()?.takeIf { it.isNotBlank() }
+            val assistantId = java.util.UUID.randomUUID().toString()
+            var responseText = ""
+
+            if (isAiConfigured()) {
+                _coachChatMessages.update {
+                    it + CoachChatMessage(id = assistantId, role = CoachChatRole.ASSISTANT, text = "")
+                }
+                try {
+                    aiManager.generateCoachChatReplyStream(
+                        userContext = context,
+                        conversationHistory = history,
+                        userMessage = trimmed,
+                        provider = textSlot.provider,
+                        modelId = textSlot.modelId,
+                        offlineModelId = textSlot.offlineModelId
+                    ).collect { chunk ->
+                        responseText += chunk
+                        _coachChatMessages.update { msgs ->
+                            msgs.map { msg ->
+                                if (msg.id == assistantId) msg.copy(text = msg.text + chunk) else msg
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    // fall through to heuristic below
+                }
+            }
+
+            val finalText = responseText.trim().takeIf { it.isNotBlank() }
                 ?: buildHeuristicCoachReply(trimmed, textSlot.provider)
-            _coachChatMessages.update { it + CoachChatMessage(role = CoachChatRole.ASSISTANT, text = responseText) }
+            if (finalText != responseText.trim()) {
+                if (_coachChatMessages.value.none { it.id == assistantId }) {
+                    _coachChatMessages.update { it + CoachChatMessage(role = CoachChatRole.ASSISTANT, text = finalText) }
+                } else {
+                    _coachChatMessages.update { msgs ->
+                        msgs.map { msg ->
+                            if (msg.id == assistantId) msg.copy(text = finalText) else msg
+                        }
+                    }
+                }
+            }
             _coachChatLoading.value = false
         }
     }

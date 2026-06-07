@@ -44,14 +44,18 @@ object OfflineModelConfig {
 
     fun specFor(modelType: String): ModelSpec? = ALL.find { it.id == modelType }
 
+    fun specForBuiltInFile(fileName: String): ModelSpec? =
+        ALL.find { it.fileName.equals(fileName, ignoreCase = true) }
+
+    /** Minimum size for unknown imports — built-in specs use stricter checks. */
+    fun isValidImportedFile(lengthBytes: Long): Boolean = lengthBytes >= 50_000_000L
+
+    fun importedId(fileName: String): String = "imported:$fileName"
+
     /** Same URL pattern as Google AI Edge Gallery DownloadWorker. */
     fun downloadUrl(spec: ModelSpec): String =
         "https://huggingface.co/${spec.huggingFaceRepo}/resolve/${spec.commitHash}/${spec.fileName}?download=true"
 
     fun isValidModelFile(spec: ModelSpec, lengthBytes: Long): Boolean =
         lengthBytes >= (spec.expectedSizeBytes * 0.90).toLong()
-
-    fun isValidImportedFile(lengthBytes: Long): Boolean = lengthBytes >= 50_000_000L
-
-    fun importedId(fileName: String): String = "imported:$fileName"
 }

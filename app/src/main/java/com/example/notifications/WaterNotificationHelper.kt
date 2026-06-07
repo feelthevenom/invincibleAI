@@ -33,7 +33,9 @@ object WaterNotificationHelper {
                 "Hydration Reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Reminders to drink water and track hydration"
+                description = "Gentle notifications to drink water — not alarms"
+                enableVibration(false)
+                setSound(null, null)
             }
             context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
@@ -214,9 +216,11 @@ object WaterNotificationHelper {
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setContentTitle("Hydration Alert")
+            .setContentTitle("Hydration Reminder")
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setOnlyAlertOnce(true)
             .setContentIntent(openIntent)
             .setAutoCancel(true)
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())

@@ -69,6 +69,7 @@ fun MainScreenContent(
     var overlay by remember { mutableStateOf(MainOverlay.None) }
     var coachSubNav by remember { mutableStateOf(CoachSubNav.Chat) }
     var coachHistoryId by remember { mutableStateOf<String?>(null) }
+    var reminderBackOverlay by remember { mutableStateOf(MainOverlay.None) }
     val context = LocalContext.current
     var lastBackPress by remember { mutableLongStateOf(0L) }
     var showWaterReminderDialog by remember { mutableStateOf(false) }
@@ -417,7 +418,18 @@ fun MainScreenContent(
                             .zIndex(3f)
                             .background(MaterialTheme.colorScheme.background)
                     ) {
-                        SettingsScreen(viewModel = viewModel, onBack = { overlay = MainOverlay.None })
+                        SettingsScreen(
+                            viewModel = viewModel,
+                            onBack = { overlay = MainOverlay.None },
+                            onOpenWaterReminder = {
+                                reminderBackOverlay = MainOverlay.Settings
+                                overlay = MainOverlay.WaterReminderSettings
+                            },
+                            onOpenWorkoutReminder = {
+                                reminderBackOverlay = MainOverlay.Settings
+                                overlay = MainOverlay.WorkoutReminder
+                            }
+                        )
                     }
                     MainOverlay.WaterTracking -> Box(
                         modifier = Modifier
@@ -439,7 +451,14 @@ fun MainScreenContent(
                     ) {
                         WaterReminderSettingsScreen(
                             viewModel = viewModel,
-                            onBack = { overlay = MainOverlay.WaterTracking }
+                            onBack = {
+                                overlay = if (reminderBackOverlay != MainOverlay.None) {
+                                    reminderBackOverlay
+                                } else {
+                                    MainOverlay.WaterTracking
+                                }
+                                reminderBackOverlay = MainOverlay.None
+                            }
                         )
                     }
                     MainOverlay.NotificationHistory -> Box(
@@ -461,7 +480,14 @@ fun MainScreenContent(
                     ) {
                         WorkoutReminderScreen(
                             viewModel = viewModel,
-                            onBack = { overlay = MainOverlay.None }
+                            onBack = {
+                                overlay = if (reminderBackOverlay != MainOverlay.None) {
+                                    reminderBackOverlay
+                                } else {
+                                    MainOverlay.None
+                                }
+                                reminderBackOverlay = MainOverlay.None
+                            }
                         )
                     }
                     MainOverlay.None -> Spacer(Modifier.fillMaxSize())

@@ -11,7 +11,10 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
@@ -50,6 +53,31 @@ class OfflineLlmEngine(private val context: Context) {
             }
         }
 
+    /** Streams tokens as they are generated — used for live Coach chat UI. */
+    fun generateStream(prompt: String, modelPath: String, image: Bitmap? = null): Flow<String> = flow {
+        ensureEngine(modelPath, enableVision = image != null)
+        val eng = engine ?: throw IllegalStateException("Offline engine failed to initialize")
+
+        val conversationConfig = ConversationConfig(
+            samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.3)
+        )
+
+        eng.createConversation(conversationConfig).use { conversation ->
+            val contents = if (image != null) {
+                Contents.of(
+                    Content.ImageBytes(bitmapToJpeg(image)),
+                    Content.Text(prompt)
+                )
+            } else {
+                Contents.of(Content.Text(prompt))
+            }
+            conversation.sendMessageAsync(contents).collect { chunk ->
+                val text = chunk.toString()
+                if (text.isNotEmpty()) emit(text)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
     private suspend fun ensureEngine(modelPath: String, enableVision: Boolean) {
         if (engine != null && loadedModelPath == modelPath) return
 
@@ -79,6 +107,31 @@ class OfflineLlmEngine(private val context: Context) {
         }
         engine = null
         loadedModelPath = null
+    }
+
+    /** Quick init test — returns true if LiteRT-LM can load the model file. */
+    suspend fun probeModel(modelPath: String): Boolean = withContext(Dispatchers.IO) {
+        if (!java.io.File(modelPath).exists()) return@withContext false
+        val probeEngine = Engine(
+            EngineConfig(
+                modelPath = modelPath,
+                backend = Backend.CPU(),
+                cacheDir = context.cacheDir.absolutePath,
+                visionBackend = null
+            )
+        )
+        try {
+            probeEngine.initialize()
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Probe failed for $modelPath", e)
+            false
+        } finally {
+            try {
+                probeEngine.close()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun bitmapToJpeg(bitmap: Bitmap, quality: Int = 80): ByteArray {

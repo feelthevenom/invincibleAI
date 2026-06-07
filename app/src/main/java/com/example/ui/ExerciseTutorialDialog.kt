@@ -518,11 +518,15 @@ fun ActiveWorkoutExerciseTutorialHost(
     onDismiss: () -> Unit
 ) {
     val guideState by viewModel.exerciseGuideState.collectAsState()
-    val isOnline = viewModel.exerciseGuideIsOnline()
+    var isOnline by remember { mutableStateOf(viewModel.exerciseGuideIsOnline()) }
 
     LaunchedEffect(selectedExercise) {
         if (selectedExercise != null) {
             viewModel.loadExerciseGuide(selectedExercise)
+            while (true) {
+                isOnline = viewModel.exerciseGuideIsOnline()
+                kotlinx.coroutines.delay(2000)
+            }
         } else {
             viewModel.clearExerciseGuideState()
         }

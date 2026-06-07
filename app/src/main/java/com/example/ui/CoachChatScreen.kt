@@ -193,7 +193,7 @@ private fun CoachChatMainContent(
             items(messages, key = { it.id }) { message ->
                 ChatBubble(message = message)
             }
-            if (loading) {
+            if (loading && messages.lastOrNull()?.role != com.example.CoachChatRole.ASSISTANT) {
                 item(key = "typing") {
                     TypingIndicator()
                 }

@@ -49,7 +49,7 @@ class MainActivity : FragmentActivity() {
             val profile by viewModel.userProfile.collectAsState()
             val profileLoaded by viewModel.initialProfileLoaded.collectAsState()
 
-            MyApplicationTheme(themeMode = profile.themeMode) {
+            MyApplicationTheme(themeMode = profile.themeMode, dynamicColor = profile.themeMode == "system") {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

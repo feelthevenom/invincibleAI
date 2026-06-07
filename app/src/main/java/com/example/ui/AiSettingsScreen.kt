@@ -84,6 +84,8 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
     }
     val ramGb = remember { viewModel.modelDownloadManager.getTotalRamGb() }
 
+    var showOfflineModelsSheet by remember { mutableStateOf(false) }
+
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) viewModel.importAnyModel(uri)
     }
@@ -582,33 +584,50 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val downloadState = remember(modelsRevision) {
-                        mapOf(
-                            "offline_2b" to viewModel.modelDownloadManager.isModelDownloaded("offline_2b"),
-                            "offline_4b" to viewModel.modelDownloadManager.isModelDownloaded("offline_4b")
-                        )
-                    }
-                    listOf("offline_2b", "offline_4b").forEach { modelId ->
-                        val isDownloaded = downloadState[modelId] == true
-                        val isActive = profile.offlineModelId == modelId &&
-                            (profile.aiProvider == "offline" || profile.aiTextProvider == "offline" || profile.aiVisionProvider == "offline")
-                        ModelDownloadCard(
-                            title = if (modelId == "offline_2b") "Gemma 4 E2B-it (~2.4 GB)" else "Gemma 4 E4B-it (~3.4 GB)",
-                            isDownloaded = isDownloaded,
-                            isDownloading = if (modelId == "offline_2b") aiSettings.isDownloading2B else aiSettings.isDownloading4B,
-                            progress = if (modelId == "offline_2b") aiSettings.progress2B else aiSettings.progress4B,
-                            isCompatible = viewModel.modelDownloadManager.isSystemCompatible(modelId),
-                            onDownload = { viewModel.startModelDownload(modelId) },
-                            onCancel = { viewModel.cancelModelDownload(modelId) },
-                            onDelete = { viewModel.deleteModel(modelId) }
-                        )
-                    }
-                    ImportModelCard(onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) })
-                }
+                val activeName = installedModels.find { it.id == profile.offlineModelId }?.displayName
+                OfflineModelsSettingCard(
+                    installedCount = installedModels.size,
+                    activeModelName = activeName,
+                    onClick = { showOfflineModelsSheet = true }
+                )
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+
+    if (showOfflineModelsSheet) {
+        val builtInStates = mapOf(
+            "offline_2b" to BuiltInModelUiState(
+                isDownloaded = viewModel.modelDownloadManager.isModelDownloaded("offline_2b"),
+                isDownloading = aiSettings.isDownloading2B,
+                progress = aiSettings.progress2B,
+                isCompatible = viewModel.modelDownloadManager.isSystemCompatible("offline_2b")
+            ),
+            "offline_4b" to BuiltInModelUiState(
+                isDownloaded = viewModel.modelDownloadManager.isModelDownloaded("offline_4b"),
+                isDownloading = aiSettings.isDownloading4B,
+                progress = aiSettings.progress4B,
+                isCompatible = viewModel.modelDownloadManager.isSystemCompatible("offline_4b")
+            )
+        )
+        OfflineModelsBottomSheet(
+            installedModels = installedModels,
+            builtInStates = builtInStates,
+            activeModelId = profile.offlineModelId,
+            onDismiss = { showOfflineModelsSheet = false },
+            onSelectModel = { viewModel.selectOfflineModel(it) },
+            onDownload = { viewModel.startModelDownload(it) },
+            onCancelDownload = { viewModel.cancelModelDownload(it) },
+            onDelete = { viewModel.deleteModel(it) },
+            onImport = {
+                showOfflineModelsSheet = false
+                importLauncher.launch(arrayOf("application/octet-stream", "application/x-litertlm", "*/*"))
+            }
+        )
+    }
+
+    aiSettings.modelWarning?.let { warning ->
+        UnsupportedModelDialog(message = warning, onDismiss = { viewModel.clearModelWarning() })
     }
 
     pickerTarget?.let { target ->
