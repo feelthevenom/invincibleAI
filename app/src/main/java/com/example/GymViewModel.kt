@@ -23,21 +23,31 @@ import com.example.data.AiProviderConfig
 import com.example.data.OpenRouterModelStore
 import com.example.data.AiRouteResolver
 import com.example.data.FoodItem
+import com.example.data.FoodServingUnit
 import android.graphics.Bitmap
+import com.example.data.FoodDiscoveryRepository
+import com.example.data.FoodImageFetcher
+import com.example.data.FoodImageResolver
+import com.example.data.WorkoutMedia
+import com.example.data.WorkoutMediaEngine
 import com.example.data.FoodNutritionCalculator
+import com.example.data.FuzzyMatcher
 import com.example.data.GymRepository
 import com.example.data.LocalFoodRepository
 import com.example.data.LocalExerciseRepository
+import com.example.data.Exercise
+import com.example.data.ExerciseRepository
 import com.example.data.CustomFoodItem
 import com.example.data.MealEntry
 import com.example.data.UserProfile
 import com.example.data.WorkoutDashboardStats
 import com.example.data.WorkoutStatsCalculator
-import com.example.data.api.OpenFoodFactsRepository
 import android.net.Uri
 import com.example.data.AiStatus
 import com.example.data.OfflineModelValidator
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.atomic.AtomicInteger
@@ -57,8 +67,11 @@ data class FoodSearchUiState(
     val isLoading: Boolean = false,
     val query: String = "",
     val localResults: List<FoodItem> = emptyList(),
+    val cachedResults: List<FoodItem> = emptyList(),
     val apiResults: List<FoodItem> = emptyList(),
+    val aiLookupResults: List<FoodItem> = emptyList(),
     val isApiLoading: Boolean = false,
+    val isAiLookupLoading: Boolean = false,
     val suggestions: List<FoodItem> = emptyList(),
     val error: String? = null
 )
@@ -151,15 +164,22 @@ class GymViewModel(
     private val repository: GymRepository,
     private val localFoodRepository: LocalFoodRepository,
     private val localExerciseRepository: LocalExerciseRepository,
-    private val offRepository: OpenFoodFactsRepository = OpenFoodFactsRepository(),
+    private val exerciseRepository: ExerciseRepository,
     val aiManager: com.example.data.AiManager,
     val modelDownloadManager: com.example.data.ModelDownloadManager,
     val secureStorageManager: com.example.data.SecureStorageManager,
     private val exerciseGuideRepository: com.example.data.ExerciseGuideRepository,
     private val coachHistoryRepository: com.example.data.CoachHistoryRepository,
+    private val workoutMediaEngine: WorkoutMediaEngine,
     val appUpdateManager: com.example.data.AppUpdateManager,
     private val openRouterApiClient: com.example.data.OpenRouterApiClient = com.example.data.OpenRouterApiClient()
 ) : ViewModel() {
+
+    private val foodImageFetcher = FoodImageFetcher()
+
+    private val foodDiscoveryRepository by lazy {
+        FoodDiscoveryRepository(repository, localFoodRepository, aiManager, foodImageFetcher)
+    }
 
     private val _aiConfigOverlay = MutableStateFlow<AiConfigOverlay?>(null)
 
@@ -279,7 +299,7 @@ class GymViewModel(
     private var exerciseSearchJob: Job? = null
     private val seededWorkoutDays = mutableSetOf<String>()
     private var localSearchJob: Job? = null
-    private var apiSearchJob: Job? = null
+
     private var downloadJob2B: Job? = null
     private var downloadJob4B: Job? = null
 
@@ -339,6 +359,7 @@ class GymViewModel(
         }
         return current.copy(aiVisionProvider = provider, aiVisionModelId = model)
     }
+
 
     fun startModelDownload(modelType: String) {
         if (modelType == "offline_2b") {
@@ -408,10 +429,7 @@ class GymViewModel(
                 com.example.data.DownloadStatus.Success -> {
                     aiManager.releaseOfflineEngine()
                     bumpModelsRevision()
-                    modelDownloadManager.listInstalledModels().lastOrNull()?.let { imported ->
-                        selectOfflineModel(imported.id)
-                    }
-                    _aiSettingsState.update { it.copy(error = null) }
+                    _aiSettingsState.update { it.copy(error = null, modelWarning = null) }
                 }
                 is com.example.data.DownloadStatus.Error -> {
                     _aiSettingsState.update { it.copy(modelWarning = result.message, error = null) }
@@ -468,9 +486,74 @@ class GymViewModel(
         val slot = AiRouteResolver.visionSlot(userProfile.value)
         if (!slotReady(slot)) return false
         if (slot.provider == "offline") {
-            return modelDownloadManager.isModelInstalled(slot.offlineModelId)
+            val model = modelDownloadManager.listInstalledModels().find { it.id == slot.offlineModelId }
+            return model?.supportsVision == true
         }
         return AiProviderConfig.supportsVision(slot.provider, slot.modelId)
+    }
+
+    suspend fun generateFoodServingUnits(food: FoodItem): List<FoodServingUnit> {
+        if (!isAiConfigured()) return emptyList()
+        val slot = AiRouteResolver.textSlot(userProfile.value)
+        return aiManager.generateFoodServingUnits(
+            food.name,
+            food.caloriesPer100g,
+            slot.provider,
+            slot.modelId,
+            slot.offlineModelId
+        )
+    }
+
+    private val foodImageMemoryCache = mutableMapOf<String, String>()
+
+    /** Resolves a food image URL: Room/memory cache → 3-tier internet fetch. Coil handles disk caching. */
+    suspend fun resolveFoodImageUrl(food: FoodItem): String? {
+        FoodImageResolver.resolveImmediate(food)?.let { return it }
+
+        val key = FoodImageResolver.normalizeName(food.name)
+        if (key.isBlank()) return null
+
+        foodImageMemoryCache[key]?.let { return it }
+
+        repository.getFoodImageCache(key)?.imageUrl?.takeIf { it.isNotBlank() }?.let { cachedUrl ->
+            foodImageMemoryCache[key] = cachedUrl
+            return cachedUrl
+        }
+
+        val cached = repository.getAllCachedFoodProducts()
+            .firstOrNull { product ->
+                product.imageUrl.isNotBlank() &&
+                    (FuzzyMatcher.score(food.name, product.name) >= 85 ||
+                        FoodImageResolver.normalizeName(product.name) == key)
+            }
+        cached?.imageUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            foodImageMemoryCache[key] = url
+            repository.cacheFoodImage(key, url, cached.source)
+            return url
+        }
+
+        if (!exerciseGuideRepository.isOnline()) return null
+
+        val fetched = foodImageFetcher.fetchFromInternet(food.name) ?: return null
+        foodImageMemoryCache[key] = fetched.url
+        repository.cacheFoodImage(key, fetched.url, fetched.source)
+        return fetched.url
+    }
+
+    /** Fetch image by food name only (for custom food AI autofill). */
+    suspend fun fetchFoodImageForName(name: String): String? {
+        if (name.isBlank()) return null
+        return resolveFoodImageUrl(
+            FoodItem(
+                name = name,
+                caloriesPer100g = 0,
+                proteinPer100g = 0f,
+                carbsPer100g = 0f,
+                fatPer100g = 0f,
+                fiberPer100g = 0f,
+                isCustom = true
+            )
+        )
     }
 
     suspend fun generateFoodSuggestions(query: String): List<FoodItem> {
@@ -700,6 +783,34 @@ class GymViewModel(
         if (requestId == exerciseGuideRequestId.get()) block()
     }
 
+    private suspend fun resolveDatasetExercise(exerciseName: String): Exercise? {
+        exerciseRepository.findBestMatch(exerciseName, minScore = 120)?.let { return it }
+        if (isAiConfigured()) {
+            val candidates = exerciseRepository.candidateMatches(exerciseName)
+            if (candidates.isNotEmpty()) {
+                val slot = AiRouteResolver.textSlot(userProfile.value)
+                val pickedId = aiManager.pickDatasetExerciseMatch(
+                    exerciseName = exerciseName,
+                    candidates = candidates.map { it.id to it.name },
+                    provider = slot.provider,
+                    modelId = slot.modelId,
+                    offlineModelId = slot.offlineModelId
+                )
+                pickedId?.let { return exerciseRepository.getExerciseById(it) }
+            }
+        }
+        return exerciseRepository.findBestMatch(exerciseName, minScore = 80)
+    }
+
+    private suspend fun resolveWorkoutMedia(exerciseName: String, datasetExercise: Exercise? = null): WorkoutMedia {
+        val matched = datasetExercise ?: resolveDatasetExercise(exerciseName)
+        return workoutMediaEngine.resolve(
+            exerciseName = exerciseName,
+            allowNetwork = exerciseGuideRepository.isOnline(),
+            aiMatchedExercise = matched
+        )
+    }
+
     fun loadExerciseGuide(exerciseName: String) {
         val requestId = exerciseGuideRequestId.incrementAndGet()
         exerciseGuideJob?.cancel()
@@ -708,27 +819,96 @@ class GymViewModel(
                 _exerciseGuideState.value = ExerciseGuideUiState.Loading
             }
             try {
-                when (val result = exerciseGuideRepository.loadGuide(exerciseName)) {
-                    is com.example.data.ExerciseGuideResult.Success ->
+                val datasetExercise = resolveDatasetExercise(exerciseName)
+                val inAppCatalog = localExerciseRepository.findByNameOrAlias(exerciseName) != null
+                val isCustom = datasetExercise == null && !inAppCatalog
+
+                if (isCustom) {
+                    val media = resolveWorkoutMedia(exerciseName, datasetExercise = null)
+                    val lookupKey = com.example.data.ExerciseNameMatcher.normalize(exerciseName)
+                    val cachedResult = exerciseGuideRepository.loadGuide(exerciseName)
+
+                    if (cachedResult is com.example.data.ExerciseGuideResult.Success && cachedResult.guide.instructions.isNotEmpty()) {
                         applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
+                            _exerciseGuideState.value = ExerciseGuideUiState.Ready(
+                                cachedResult.guide,
+                                workoutMedia = media
+                            )
                         }
-                    com.example.data.ExerciseGuideResult.OfflineNoCache ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
+                    } else {
+                        // Trigger AI Generation dynamically using Gemini JSON parsing engine
+                        if (isAiConfigured()) {
+                            val slot = com.example.data.AiRouteResolver.textSlot(userProfile.value)
+                            val jsonText = aiManager.generateCustomExerciseGuide(
+                                exerciseName = exerciseName,
+                                provider = slot.provider,
+                                modelId = slot.modelId,
+                                offlineModelId = slot.offlineModelId
+                            )
+                            if (jsonText != null) {
+                                val data = parseCustomGuideJson(jsonText)
+                                val guide = exerciseGuideRepository.saveAiGuide(
+                                    exerciseName = exerciseName,
+                                    steps = data.steps,
+                                    targetMuscles = data.targetMuscles,
+                                    equipments = data.equipments,
+                                    bodyParts = data.bodyParts
+                                )
+                                applyExerciseGuideResult(requestId) {
+                                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(
+                                        guide,
+                                        workoutMedia = media
+                                    )
+                                }
+                            } else {
+                                applyExerciseGuideResult(requestId) {
+                                    _exerciseGuideState.value = ExerciseGuideUiState.Error("Failed to generate custom guide using AI.")
+                                }
+                            }
+                        } else {
+                            val emptyGuide = com.example.data.ExerciseGuideDetail(
+                                displayName = exerciseName,
+                                apiName = exerciseName,
+                                exerciseId = "custom_${lookupKey.hashCode()}",
+                                instructions = emptyList(),
+                                targetMuscles = emptyList(),
+                                equipments = emptyList(),
+                                bodyParts = emptyList(),
+                                source = com.example.data.GuideSource.BUNDLED,
+                                fromCache = false
+                            )
+                            applyExerciseGuideResult(requestId) {
+                                _exerciseGuideState.value = ExerciseGuideUiState.Ready(
+                                    emptyGuide,
+                                    workoutMedia = media
+                                )
+                            }
                         }
-                    com.example.data.ExerciseGuideResult.NoOnlineMatch ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
-                        }
-                    com.example.data.ExerciseGuideResult.RateLimited ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.RateLimited(exerciseName)
-                        }
-                    is com.example.data.ExerciseGuideResult.Error ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.Error(result.message)
-                        }
+                    }
+                } else {
+                    val (result, resolvedMedia) = coroutineScope {
+                        val mediaDeferred = async { resolveWorkoutMedia(exerciseName, datasetExercise) }
+                        val guideResult = exerciseGuideRepository.loadGuide(exerciseName)
+                        guideResult to mediaDeferred.await()
+                    }
+                    when (result) {
+                        is com.example.data.ExerciseGuideResult.Success ->
+                            applyExerciseGuideResult(requestId) {
+                                _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide, workoutMedia = resolvedMedia)
+                            }
+                        com.example.data.ExerciseGuideResult.OfflineNoCache ->
+                            applyExerciseGuideResult(requestId) {
+                                _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
+                            }
+                        com.example.data.ExerciseGuideResult.NoOnlineMatch ->
+                            applyExerciseGuideResult(requestId) {
+                                _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
+                            }
+                        is com.example.data.ExerciseGuideResult.Error ->
+                            applyExerciseGuideResult(requestId) {
+                                _exerciseGuideState.value = ExerciseGuideUiState.Error(result.message)
+                            }
+                    }
                 }
             } catch (e: CancellationException) {
                 return@launch
@@ -742,49 +922,7 @@ class GymViewModel(
         }
     }
 
-    fun fetchExerciseGuideOnline(exerciseName: String) {
-        val requestId = exerciseGuideRequestId.incrementAndGet()
-        exerciseGuideJob?.cancel()
-        exerciseGuideJob = viewModelScope.launch {
-            val previous = _exerciseGuideState.value
-            applyExerciseGuideResult(requestId) {
-                _exerciseGuideState.value = ExerciseGuideUiState.Loading
-            }
-            try {
-                when (val result = exerciseGuideRepository.loadGuide(exerciseName, forceOnline = true)) {
-                    is com.example.data.ExerciseGuideResult.Success ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.Ready(result.guide)
-                        }
-                    com.example.data.ExerciseGuideResult.OfflineNoCache ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.NeedsInternet(exerciseName)
-                        }
-                    com.example.data.ExerciseGuideResult.NoOnlineMatch ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = ExerciseGuideUiState.NoMatch(exerciseName)
-                        }
-                    com.example.data.ExerciseGuideResult.RateLimited ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
-                            else ExerciseGuideUiState.RateLimited(exerciseName)
-                        }
-                    is com.example.data.ExerciseGuideResult.Error ->
-                        applyExerciseGuideResult(requestId) {
-                            _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
-                            else ExerciseGuideUiState.Error(result.message)
-                        }
-                }
-            } catch (e: CancellationException) {
-                return@launch
-            } catch (e: Exception) {
-                applyExerciseGuideResult(requestId) {
-                    _exerciseGuideState.value = if (previous is ExerciseGuideUiState.Ready) previous
-                    else ExerciseGuideUiState.Error(e.message ?: "Failed to load exercise tutorial.")
-                }
-            }
-        }
-    }
+    fun reloadExerciseGuide(exerciseName: String) = loadExerciseGuide(exerciseName)
 
     fun fillExerciseGuideFromAi(exerciseName: String, replaceExisting: Boolean = true) {
         val requestId = exerciseGuideRequestId.incrementAndGet()
@@ -826,8 +964,13 @@ class GymViewModel(
                     return@launch
                 }
                 val guide = exerciseGuideRepository.saveAiGuide(exerciseName, steps)
+                val media = resolveWorkoutMedia(exerciseName)
                 applyExerciseGuideResult(requestId) {
-                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(guide, isGeneratingAi = false)
+                    _exerciseGuideState.value = ExerciseGuideUiState.Ready(
+                        guide,
+                        workoutMedia = media,
+                        isGeneratingAi = false
+                    )
                 }
             } catch (e: CancellationException) {
                 return@launch
@@ -1451,6 +1594,16 @@ class GymViewModel(
         viewModelScope.launch { repository.deleteNotification(id) }
     }
 
+    fun clearNotifications(tabIndex: Int) {
+        viewModelScope.launch {
+            when (tabIndex) {
+                1 -> repository.clearNotificationsByCategory("hydration")
+                2 -> repository.clearNotificationsExceptCategory("hydration")
+                else -> repository.clearAllNotifications()
+            }
+        }
+    }
+
     fun markNotificationsViewed() {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -1484,7 +1637,9 @@ class GymViewModel(
         mealType: String,
         food: FoodItem,
         weightGrams: Int,
-        logDayStart: Long = DietDateUtils.startOfTodayMillis()
+        logDayStart: Long = DietDateUtils.startOfTodayMillis(),
+        servingLabel: String = "",
+        servingQuantity: Float = 0f
     ) {
         if (DietDateUtils.isFuture(logDayStart)) return
         viewModelScope.launch {
@@ -1496,6 +1651,8 @@ class GymViewModel(
                 mealType = mealType,
                 foodName = food.name,
                 weightGrams = weightGrams,
+                servingLabel = servingLabel,
+                servingQuantity = servingQuantity,
                 calories = nutrition.calories,
                 protein = nutrition.protein,
                 carbs = nutrition.carbs,
@@ -1536,59 +1693,61 @@ class GymViewModel(
     }
 
     /**
-     * Called on every keystroke. Performs:
-     *  - Instant local search (no debounce)
-     *  - Debounced API search (500ms) only if local results < 5
+     * Hybrid search: bundled fuzzy → cached products → Open Food Facts → online AI (cache miss only).
      */
     fun onFoodSearchQueryChanged(query: String) {
         _foodSearchState.update { it.copy(query = query) }
-
-        // Cancel any pending jobs
         localSearchJob?.cancel()
-        apiSearchJob?.cancel()
 
         if (query.isBlank()) {
-            // Reset to suggestions
             _foodSearchState.update {
                 it.copy(
                     localResults = it.suggestions,
+                    cachedResults = emptyList(),
                     apiResults = emptyList(),
+                    aiLookupResults = emptyList(),
                     isLoading = false,
                     isApiLoading = false,
+                    isAiLookupLoading = false,
                     error = null
                 )
             }
             return
         }
 
-        // Instant local search (very fast, in-memory)
         localSearchJob = viewModelScope.launch {
-            delay(100) // Tiny debounce to batch rapid keystrokes
-            val prefs = userProfile.value.cuisinePreferences
-            val localResults = localFoodRepository.search(query, prefs)
-            _foodSearchState.update {
-                it.copy(localResults = localResults, isLoading = false, error = null)
-            }
+            delay(120)
+            _foodSearchState.update { it.copy(isApiLoading = true, error = null) }
 
-            // Only call API if local results are sparse and query is meaningful
-            if (localResults.size < 5 && query.trim().length >= 3) {
-                _foodSearchState.update { it.copy(isApiLoading = true) }
-                apiSearchJob = launch {
-                    delay(400) // Extra debounce for API calls
-                    val apiResults = offRepository.search(query.trim())
-                    _foodSearchState.update {
-                        it.copy(apiResults = apiResults, isApiLoading = false)
-                    }
-                }
-            } else {
-                _foodSearchState.update { it.copy(apiResults = emptyList(), isApiLoading = false) }
+            val profile = userProfile.value
+            val slot = AiRouteResolver.textSlot(profile)
+            val onlineProvider = if (slot.provider != "offline") slot.provider else profile.aiProvider
+            val onlineModelId = if (slot.provider != "offline") slot.modelId else profile.aiTextModelId
+
+            val result = foodDiscoveryRepository.search(
+                query = query,
+                cuisinePreferences = profile.cuisinePreferences,
+                customFoods = customFoods.value,
+                onlineProvider = onlineProvider,
+                onlineModelId = onlineModelId
+            )
+
+            _foodSearchState.update {
+                it.copy(
+                    localResults = result.local,
+                    cachedResults = result.cached,
+                    apiResults = emptyList(),
+                    aiLookupResults = result.aiLookup,
+                    isLoading = false,
+                    isApiLoading = false,
+                    isAiLookupLoading = false
+                )
             }
         }
     }
 
     fun clearFoodSearch() {
         localSearchJob?.cancel()
-        apiSearchJob?.cancel()
         _foodSearchState.value = FoodSearchUiState()
     }
 
@@ -2806,6 +2965,7 @@ sealed class ExerciseGuideUiState {
     data object Loading : ExerciseGuideUiState()
     data class Ready(
         val guide: com.example.data.ExerciseGuideDetail,
+        val workoutMedia: WorkoutMedia = WorkoutMedia.None,
         val isGeneratingAi: Boolean = false
     ) : ExerciseGuideUiState()
     data class NoMatch(val exerciseName: String) : ExerciseGuideUiState()
@@ -2896,23 +3056,66 @@ class GymViewModelFactory(
     private val repository: GymRepository,
     private val localFoodRepository: LocalFoodRepository,
     private val localExerciseRepository: LocalExerciseRepository,
-    private val offRepository: OpenFoodFactsRepository,
+    private val exerciseRepository: ExerciseRepository,
     private val aiManager: com.example.data.AiManager,
     private val modelDownloadManager: com.example.data.ModelDownloadManager,
     private val secureStorageManager: com.example.data.SecureStorageManager,
     private val exerciseGuideRepository: com.example.data.ExerciseGuideRepository,
     private val coachHistoryRepository: com.example.data.CoachHistoryRepository,
+    private val workoutMediaEngine: WorkoutMediaEngine,
     private val appUpdateManager: com.example.data.AppUpdateManager
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GymViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
             return GymViewModel(
-                repository, localFoodRepository, localExerciseRepository,
-                offRepository, aiManager, modelDownloadManager, secureStorageManager,
-                exerciseGuideRepository, coachHistoryRepository, appUpdateManager
+                repository, localFoodRepository, localExerciseRepository, exerciseRepository,
+                aiManager, modelDownloadManager, secureStorageManager,
+                exerciseGuideRepository, coachHistoryRepository, workoutMediaEngine, appUpdateManager
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+private data class CustomGuideData(
+    val steps: List<String>,
+    val targetMuscles: List<String>,
+    val equipments: List<String>,
+    val bodyParts: List<String>
+)
+
+private fun parseCustomGuideJson(jsonText: String): CustomGuideData {
+    val regex = Regex("\\{[\\s\\S]*\\}")
+    val cleanJson = regex.find(jsonText)?.value ?: jsonText
+    return try {
+        val obj = org.json.JSONObject(cleanJson)
+        val steps = mutableListOf<String>()
+        obj.optJSONArray("steps")?.let { array ->
+            for (i in 0 until array.length()) {
+                steps.add(array.getString(i))
+            }
+        }
+        val targetMuscles = mutableListOf<String>()
+        obj.optJSONArray("targetMuscles")?.let { array ->
+            for (i in 0 until array.length()) {
+                targetMuscles.add(array.getString(i))
+            }
+        }
+        val equipments = mutableListOf<String>()
+        obj.optJSONArray("equipments")?.let { array ->
+            for (i in 0 until array.length()) {
+                equipments.add(array.getString(i))
+            }
+        }
+        val bodyParts = mutableListOf<String>()
+        obj.optJSONArray("bodyParts")?.let { array ->
+            for (i in 0 until array.length()) {
+                bodyParts.add(array.getString(i))
+            }
+        }
+        CustomGuideData(steps, targetMuscles, equipments, bodyParts)
+    } catch (_: Exception) {
+        CustomGuideData(emptyList(), emptyList(), emptyList(), emptyList())
     }
 }

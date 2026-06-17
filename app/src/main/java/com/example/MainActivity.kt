@@ -36,12 +36,13 @@ class MainActivity : FragmentActivity() {
                     app.repository,
                     app.localFoodRepository,
                     app.localExerciseRepository,
-                    app.offRepository,
+                    app.exerciseRepository,
                     app.aiManager,
                     app.modelDownloadManager,
                     app.secureStorageManager,
                     app.exerciseGuideRepository,
                     app.coachHistoryRepository,
+                    app.workoutMediaEngine,
                     app.appUpdateManager
                 )
             )
@@ -81,6 +82,7 @@ class MainActivity : FragmentActivity() {
                         else -> "main"
                     }
 
+                    // startDestination must stay constant; route changes are handled below.
                     LaunchedEffect(targetRoute) {
                         val current = navController.currentBackStackEntry?.destination?.route
                         if (current != targetRoute) {
@@ -95,7 +97,7 @@ class MainActivity : FragmentActivity() {
 
                     NavHost(
                         navController = navController,
-                        startDestination = targetRoute
+                        startDestination = "welcome"
                     ) {
                         composable("welcome") {
                             WelcomeScreen {

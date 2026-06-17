@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -238,10 +239,10 @@ private fun ExerciseSearchPage(
                 item(key = "cardio_header") {
                     WorkoutSectionHeader("CARDIO EXERCISES")
                 }
-                items(
+                itemsIndexed(
                     searchState.suggestions.filter { it.isCardio || it.exerciseType.equals("Cardio", true) },
-                    key = { "cardio_${it.id}" }
-                ) { exercise ->
+                    key = { index, item -> "cardio_${item.id}_$index" }
+                ) { _, exercise ->
                     ExerciseListItem(
                         name = exercise.name,
                         subtitle = "Cardio · timer & calories",
@@ -254,7 +255,7 @@ private fun ExerciseSearchPage(
                 item(key = "custom_header") {
                     WorkoutSectionHeader("YOUR CUSTOM EXERCISES")
                 }
-                items(customExercises, key = { "custom_${it.id}" }) { ce ->
+                items(customExercises, key = { "section_custom_${it.id}" }) { ce ->
                     ExerciseListItem(
                         name = ce.name,
                         subtitle = if (ce.isCardio) "Cardio · timer & calories" else "${ce.exerciseType} · ${ce.defaultSets} sets × ${ce.defaultReps} reps",
@@ -282,7 +283,7 @@ private fun ExerciseSearchPage(
                 item(key = "local_header") {
                     WorkoutSectionHeader(localLabel)
                 }
-                items(searchState.localResults, key = { it.id }) { exercise ->
+                itemsIndexed(searchState.localResults, key = { index, item -> "local_${item.id}_$index" }) { _, exercise ->
                     val subtitle = if (exercise.isCardio || exercise.exerciseType.equals("Cardio", true)) {
                         "Cardio · timer & calories"
                     } else {
@@ -296,11 +297,27 @@ private fun ExerciseSearchPage(
                 }
             }
 
+            if (searchState.query.trim().isNotEmpty() &&
+                searchState.localResults.isEmpty() &&
+                searchState.aiSuggestions.isEmpty() &&
+                !searchState.isLoading &&
+                !searchState.aiLoading
+            ) {
+                item(key = "no_results") {
+                    Text(
+                        "No exercises match \"${searchState.query.trim()}\". Try a shorter name, use AI Suggest, or create a custom exercise.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+            }
+
             if (searchState.aiSuggestions.isNotEmpty()) {
                 item(key = "ai_header") {
                     WorkoutSectionHeader("AI SUGGESTIONS · tap Add or edit name")
                 }
-                items(searchState.aiSuggestions, key = { it.id }) { exercise ->
+                itemsIndexed(searchState.aiSuggestions, key = { index, item -> "ai_${item.id}_$index" }) { _, exercise ->
                     AiExerciseSuggestionCard(
                         exercise = exercise,
                         name = aiDraftNames[exercise.id] ?: exercise.name,

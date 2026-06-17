@@ -12,15 +12,31 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlin.math.abs
+import com.example.data.FoodQuantityOptions
 
 private val WheelItemHeight: Dp = 44.dp
 private val WheelVisibleRows = 5
@@ -34,6 +50,195 @@ private fun LazyListState.centeredItemIndex(): Int {
         .minByOrNull { item -> abs((item.offset + item.size / 2) - viewportCenter) }
         ?.index
         ?: firstVisibleItemIndex
+}
+
+@Composable
+fun EditableQuantityWheel(
+    items: List<String>,
+    selectedIndex: Int,
+    editText: String,
+    onEditTextChange: (String) -> Unit,
+    onSelectedIndex: (Int) -> Unit,
+    onFocusChange: (Boolean) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    if (items.isEmpty()) return
+    val safeIndex = selectedIndex.coerceIn(0, items.lastIndex)
+    val itemHeight = 40.dp
+    val wheelHeight = itemHeight * 5
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = safeIndex)
+    val flingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(
+        lazyListState = listState,
+        snapPosition = androidx.compose.foundation.gestures.snapping.SnapPosition.Center
+    )
+    val centeredIndex by remember {
+        derivedStateOf { listState.centeredItemIndex().coerceIn(0, items.lastIndex) }
+    }
+    val contentPadding = PaddingValues(vertical = (wheelHeight - itemHeight) / 2)
+    val cs = MaterialTheme.colorScheme
+    var editing by remember { mutableStateOf(false) }
+    var textFieldValue by remember {
+        mutableStateOf(TextFieldValue(editText))
+    }
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+
+    // Sync from outside when not editing
+    LaunchedEffect(editText) {
+        if (!editing) {
+            textFieldValue = TextFieldValue(editText, selection = TextRange(editText.length))
+        }
+    }
+
+    LaunchedEffect(safeIndex, items.size) {
+        if (!editing && listState.centeredItemIndex() != safeIndex) {
+            listState.animateScrollToItem(safeIndex)
+        }
+    }
+
+    LaunchedEffect(listState, items.size) {
+        snapshotFlow { listState.centeredItemIndex() }
+            .distinctUntilChanged()
+            .collect { index ->
+                if (index in items.indices && !editing) {
+                    onSelectedIndex(index)
+                }
+            }
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (scrolling && editing) {
+                    focusManager.clearFocus()
+                    editing = false
+                }
+            }
+    }
+
+    LaunchedEffect(editing) {
+        onFocusChange(editing)
+        if (editing) {
+            delay(100)
+            focusRequester.requestFocus()
+        }
+    }
+
+    fun commitEdit() {
+        if (!editing) return
+        editing = false
+        val cleanText = textFieldValue.text.replace(',', '.')
+        val parsed = cleanText.toDoubleOrNull()?.takeIf { it > 0 }
+        if (parsed != null) {
+            val formatted = FoodQuantityOptions.format(parsed)
+            onEditTextChange(formatted)
+            textFieldValue = TextFieldValue(formatted, selection = TextRange(formatted.length))
+        } else {
+            val fallback = items.getOrElse(centeredIndex) { textFieldValue.text }
+            onEditTextChange(fallback)
+            textFieldValue = TextFieldValue(fallback, selection = TextRange(fallback.length))
+        }
+        focusManager.clearFocus()
+    }
+
+    BackHandler(enabled = editing) {
+        commitEdit()
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(wheelHeight),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = cs.outlineVariant.copy(0.35f), thickness = 1.dp)
+            Spacer(Modifier.height(itemHeight - 2.dp))
+            HorizontalDivider(color = cs.outlineVariant.copy(0.35f), thickness = 1.dp)
+        }
+        LazyColumn(
+            state = listState,
+            flingBehavior = flingBehavior,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+            userScrollEnabled = !editing
+        ) {
+            items(items.size) { index ->
+                val isSelected = index == centeredIndex
+                Text(
+                    text = items[index],
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = if (isSelected) 28.sp else 15.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    ),
+                    color = if (isSelected) cs.onSurface else cs.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(itemHeight)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .alpha(if (isSelected && editing) 0f else if (isSelected) 1f else 0.38f)
+                        .then(
+                            if (isSelected && !editing) {
+                                Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = {
+                                        textFieldValue = TextFieldValue(
+                                            items[index], 
+                                            selection = TextRange(0, items[index].length)
+                                        )
+                                        editing = true
+                                    }
+                                )
+                            } else Modifier
+                        )
+                )
+            }
+        }
+        if (editing) {
+            BasicTextField(
+                value = textFieldValue,
+                onValueChange = { v ->
+                    val s = v.text.replace(',', '.')
+                    if (s.isEmpty() || s.matches(Regex("^\\d*(\\.\\d*)?$"))) {
+                        textFieldValue = v.copy(text = s)
+                        s.toDoubleOrNull()?.takeIf { it > 0 }?.let { onEditTextChange(s) }
+                    }
+                },
+                modifier = Modifier
+                    .widthIn(min = 48.dp, max = 100.dp)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { state ->
+                        if (!state.isFocused && editing) commitEdit()
+                    },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    color = cs.onSurface
+                ),
+                singleLine = true,
+                cursorBrush = SolidColor(cs.primary),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { commitEdit() }),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            inner()
+                            Spacer(Modifier.height(2.dp))
+                            Box(Modifier.width(60.dp).height(2.dp).background(cs.primary))
+                        }
+                    }
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -209,17 +414,11 @@ fun WheelPicker(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(itemHeight)
-                    .background(cs.primaryContainer.copy(alpha = if (compact) 0.35f else 0.45f), RoundedCornerShape(8.dp))
-            )
             if (compact) {
                 Column(Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = cs.outlineVariant.copy(0.45f), thickness = 1.dp)
+                    HorizontalDivider(color = cs.outlineVariant.copy(0.35f), thickness = 1.dp)
                     Spacer(Modifier.height(itemHeight - 2.dp))
-                    HorizontalDivider(color = cs.outlineVariant.copy(0.45f), thickness = 1.dp)
+                    HorizontalDivider(color = cs.outlineVariant.copy(0.35f), thickness = 1.dp)
                 }
             }
             LazyColumn(
@@ -234,16 +433,21 @@ fun WheelPicker(
                     Text(
                         text = items[index],
                         style = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = if (isSelected) if (compact) 22.sp else 20.sp else if (compact) 15.sp else 16.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            fontSize = when {
+                                isSelected && compact -> 28.sp
+                                isSelected -> 24.sp
+                                compact -> 15.sp
+                                else -> 16.sp
+                            },
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         ),
-                        color = if (isSelected) cs.onPrimaryContainer else cs.onSurfaceVariant,
+                        color = if (isSelected) cs.onSurface else cs.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(itemHeight)
                             .wrapContentHeight(Alignment.CenterVertically)
-                            .alpha(if (isSelected) 1f else 0.45f)
+                            .alpha(if (isSelected) 1f else 0.38f)
                     )
                 }
             }

@@ -113,16 +113,90 @@ class AiManager(
         modelId: String,
         offlineModelId: String
     ): List<FoodItem> {
+        lookupPackagedProduct(query, provider, modelId, offlineModelId)?.let { return listOf(it) }
+        return emptyList()
+    }
+
+    /** Online-only structured lookup for branded/packaged products (supplements, niche items). */
+    suspend fun lookupPackagedProduct(
+        query: String,
+        provider: String,
+        modelId: String,
+        offlineModelId: String = ""
+    ): FoodItem? {
+        if (provider == "offline") return null
         val prompt = """
-            You are a nutrition assistant. The user wants food named "$query".
-            Return ONLY a JSON array with up to 4 foods and macros per 100g.
-            Example:
-            [{"name":"White Rice","calories":130,"protein":2.7,"carbs":28.0,"fat":0.3,"fiber":0.4}]
+            You are a nutrition database assistant for a fitness app.
+            The user is searching for the commercial product: "$query"
+            (examples: Tata Whey, Nakpro Concentrate Gold, MuscleBlaze whey, etc.)
+
+            Return ONLY a JSON array with one object — realistic label values per 100g:
+            [{"name":"Brand Product Name","calories":400,"protein":80,"carbs":8,"fat":5,"fiber":0,"basis":"100g"}]
+
+            Rules:
+            - Use realistic whey protein / supplement macros if it is a protein powder (~350-420 kcal, 70-85g protein per 100g).
+            - If unsure, set confidence to "low" and use conservative typical category averages.
+            - No markdown, no explanation, single JSON object only.
         """.trimIndent()
 
         return when (val result = runPrompt(prompt, provider, modelId, offlineModelId, image = null)) {
-            is AiAnalysisResult.Success -> result.items
-            is AiAnalysisResult.Error -> emptyList()
+            is AiAnalysisResult.Success -> result.items.firstOrNull()?.copy(
+                id = "ai_lookup_${query.hashCode()}",
+                source = "ai_lookup"
+            )
+            is AiAnalysisResult.Error -> null
+        }
+    }
+
+    suspend fun generateFoodServingUnits(
+        foodName: String,
+        caloriesPer100g: Int,
+        provider: String,
+        modelId: String,
+        offlineModelId: String
+    ): List<FoodServingUnit> {
+        val prompt = """
+            You are a nutrition app serving-size expert (like HealthifyMe).
+            For food "$foodName" (${caloriesPer100g} kcal per 100g), return ONLY a JSON array of 4-6 common serving units.
+            Each item: {"label":"glass","gramsPerUnit":350}
+            Use realistic Indian + international units (roti, cup, ml, piece, medium, serve, tbsp, glass, scoop, etc.).
+            gramsPerUnit = weight in grams (or ml for liquids) for ONE unit at quantity 1.
+            For protein powder use scoop (~30-35g). For milkshakes use glass (~300-350 ml).
+            No markdown, no explanation.
+        """.trimIndent()
+
+        val raw = runPromptRaw(prompt, provider, modelId, offlineModelId) ?: return emptyList()
+        return parseServingUnitsJson(raw)
+    }
+
+    private fun parseServingUnitsJson(raw: String): List<FoodServingUnit> {
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val text = raw.trim()
+                .removePrefix("```json").removePrefix("```")
+                .removeSuffix("```").trim()
+            val start = text.indexOf('[')
+            val end = text.lastIndexOf(']')
+            if (start < 0 || end <= start) return emptyList()
+            val arr = org.json.JSONArray(text.substring(start, end + 1))
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val label = obj.optString("label", obj.optString("name", "")).trim()
+                    val grams = obj.optDouble("gramsPerUnit", obj.optDouble("grams", 0.0))
+                    if (label.isNotBlank() && grams > 0) {
+                        add(
+                            FoodServingUnit(
+                                id = "ai_${label.lowercase().replace(Regex("[^a-z0-9]"), "_")}_$i",
+                                label = label,
+                                gramsPerUnit = grams
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -623,6 +697,7 @@ class AiManager(
                         carbsPer100g = obj.optDouble("carbs", 0.0).toFloat(),
                         fatPer100g = obj.optDouble("fat", 0.0).toFloat(),
                         fiberPer100g = obj.optDouble("fiber", 0.0).toFloat(),
+                        volumeBased = obj.optString("basis", "100g").contains("ml", ignoreCase = true),
                         isCustom = true,
                         source = "ai_generated"
                     )
@@ -1050,6 +1125,64 @@ class AiManager(
             
             Example:
             ["Step:1 Set up...", "Step:2 Grip...", "Step:3 Pull..."]
+        """.trimIndent()
+        return runPromptRaw(prompt, provider, modelId, offlineModelId)
+    }
+
+    /**
+     * AI disambiguation: pick one exercise id from candidates, or null when none fit well.
+     */
+    suspend fun pickDatasetExerciseMatch(
+        exerciseName: String,
+        candidates: List<Pair<String, String>>,
+        provider: String,
+        modelId: String,
+        offlineModelId: String
+    ): String? {
+        if (candidates.isEmpty()) return null
+        val options = candidates.joinToString("\n") { (id, name) -> "$id | $name" }
+        val prompt = """
+            You are matching a user's exercise name to a known exercise database entry.
+
+            User exercise: "$exerciseName"
+
+            Candidates (id | name):
+            $options
+
+            RULES:
+            - Return ONLY the exercise id string if ONE candidate clearly matches the same movement.
+            - Return NONE if no candidate is the same exercise (avoid wrong GIFs).
+            - Prefer exact or near-exact name matches over partial word overlap.
+            - Do NOT return markdown or explanation.
+
+            Example outputs: 0025 or NONE
+        """.trimIndent()
+        val raw = runPromptRaw(prompt, provider, modelId, offlineModelId)?.trim().orEmpty()
+        if (raw.equals("NONE", ignoreCase = true) || raw.isBlank()) return null
+        val id = raw.lines().first().trim().removePrefix("id:").trim()
+        return candidates.firstOrNull { it.first.equals(id, ignoreCase = true) }?.first
+    }
+
+    suspend fun generateCustomExerciseGuide(
+        exerciseName: String,
+        provider: String,
+        modelId: String,
+        offlineModelId: String
+    ): String? {
+        val prompt = """
+            You are a fitness coach. Analyze this custom exercise: $exerciseName
+            
+            RULES:
+            - Return ONLY a JSON object containing the guide information
+            - The JSON object must have exactly these keys:
+              "steps": A JSON array of 4-8 strings. Each string MUST be in "Step:1 ...", "Step:2 ..." format.
+              "targetMuscles": A JSON array of target muscles (lowercase, e.g. ["quadriceps", "gluteus maximus"])
+              "equipments": A JSON array of equipments used (lowercase, e.g. ["dumbbell", "barbell", "bodyweight"])
+              "bodyParts": A JSON array of body parts (lowercase, e.g. ["legs", "chest", "back"])
+            - Do NOT include any markdown formatting, markdown code blocks (like ```json), or extra text outside the JSON object.
+            
+            Example response:
+            {"steps":["Step:1 Stand with feet shoulder-width...","Step:2 Lower your hips..."],"targetMuscles":["quadriceps"],"equipments":["bodyweight"],"bodyParts":["legs"]}
         """.trimIndent()
         return runPromptRaw(prompt, provider, modelId, offlineModelId)
     }

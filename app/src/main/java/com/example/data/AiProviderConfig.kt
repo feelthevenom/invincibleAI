@@ -104,7 +104,7 @@ object AiProviderConfig {
     }
 
     fun providerSubtitle(provider: String): String = when (provider) {
-        "gemini" -> "Google multimodal cloud"
+        "gemini" -> "Google multimodal cloud (API key)"
         "groq" -> "High-speed inference cloud"
         "openrouter" -> "Multi-provider model gateway"
         "offline" -> "On-device private inference"
@@ -132,10 +132,11 @@ object AiProviderConfig {
 
     fun supportsVision(provider: String, modelId: String): Boolean = when (provider) {
         "offline" -> modelId.isNotBlank()
+        "gemini" -> findModel(provider, modelId)?.supportsVision ?: modelId.startsWith("gemini-")
         "groq" -> GROQ_VISION_MODELS.any { it.id == modelId } ||
             resolveGroqModelId(modelId, vision = true) == modelId
         "openrouter" -> OpenRouterModelStore.findModel(modelId)?.supportsVision == true
-        else -> findModel(provider, modelId)?.supportsVision ?: modelId.startsWith("gemini-")
+        else -> findModel(provider, modelId)?.supportsVision ?: false
     }
 
     fun resolveOpenRouterModelId(modelId: String, vision: Boolean = false): String {

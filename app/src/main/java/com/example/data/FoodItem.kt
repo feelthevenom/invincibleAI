@@ -11,11 +11,14 @@ data class FoodItem(
     val fatPer100g: Float,
     val fiberPer100g: Float,
     val isCustom: Boolean = false,
+    /** When true, nutrition values are per 100 ml (liquids). */
+    val volumeBased: Boolean = false,
     val cuisineTags: List<String> = emptyList(),
     val region: String = "generic",
     val aliases: List<String> = emptyList(),
     val popularity: Int = 50,
-    val source: String = "local"
+    val source: String = "local",
+    val imageUrl: String? = null
 )
 
 data class FoodNutrition(
@@ -39,16 +42,20 @@ object FoodNutritionCalculator {
         )
     }
 
-    fun fromCustomEntity(entity: CustomFoodItem): FoodItem = FoodItem(
-        id = "custom_${entity.id}",
-        name = entity.name,
-        caloriesPer100g = entity.caloriesPer100g,
-        proteinPer100g = entity.proteinPer100g,
-        carbsPer100g = entity.carbsPer100g,
-        fatPer100g = entity.fatPer100g,
-        fiberPer100g = entity.fiberPer100g,
-        isCustom = true
-    )
+    fun fromCustomEntity(entity: CustomFoodItem): FoodItem {
+        val item = FoodItem(
+            id = "custom_${entity.id}",
+            name = entity.name,
+            caloriesPer100g = entity.caloriesPer100g,
+            proteinPer100g = entity.proteinPer100g,
+            carbsPer100g = entity.carbsPer100g,
+            fatPer100g = entity.fatPer100g,
+            fiberPer100g = entity.fiberPer100g,
+            isCustom = true,
+            imageUrl = entity.imageUrl.takeIf { it.isNotBlank() }
+        )
+        return item.copy(volumeBased = FoodServingCatalog.isVolumeBased(item))
+    }
 
     /** Derive per-100g values from a logged meal entry so weight edits can recalculate macros. */
     fun per100FromMealEntry(entry: MealEntry): FoodItem? {
@@ -70,6 +77,27 @@ object FoodNutritionCalculator {
         val nutrition = nutritionForWeight(per100, weightGrams)
         return entry.copy(
             weightGrams = weightGrams,
+            calories = nutrition.calories,
+            protein = nutrition.protein,
+            carbs = nutrition.carbs,
+            fat = nutrition.fat,
+            fiber = nutrition.fiber
+        )
+    }
+
+    fun recalculateEntryForServing(
+        entry: MealEntry,
+        food: FoodItem,
+        weightGrams: Int,
+        servingLabel: String,
+        servingQuantity: Float
+    ): MealEntry? {
+        if (weightGrams <= 0) return null
+        val nutrition = nutritionForWeight(food, weightGrams)
+        return entry.copy(
+            weightGrams = weightGrams,
+            servingLabel = servingLabel,
+            servingQuantity = servingQuantity,
             calories = nutrition.calories,
             protein = nutrition.protein,
             carbs = nutrition.carbs,

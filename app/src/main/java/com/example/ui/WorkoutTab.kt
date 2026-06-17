@@ -23,9 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -713,21 +716,31 @@ fun WorkoutExerciseCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        group.exerciseName,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp),
+                val annotatedTitle = buildAnnotatedString {
+                    withStyle(style = SpanStyle(
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable(onClick = onExerciseNameClick)
-                    )
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )) {
+                        append(group.exerciseName)
+                    }
                     if (maxWeightKg > 0f) {
-                        Text(
-                            "Max ${formatWeightDisplay(maxWeightKg)} kg",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.secondary
-                        )
+                        append("  ")
+                        withStyle(style = SpanStyle(
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )) {
+                            append("Max ${formatWeightDisplay(maxWeightKg)} kg")
+                        }
                     }
                 }
+                Text(
+                    text = annotatedTitle,
+                    modifier = Modifier.clickable(onClick = onExerciseNameClick),
+                    lineHeight = 22.sp
+                )
+                Spacer(Modifier.height(4.dp))
                 Box(
                     Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp)

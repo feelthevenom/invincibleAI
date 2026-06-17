@@ -17,14 +17,23 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * Wraps LiteRT-LM (same stack as Google AI Edge Gallery) for on-device inference.
  */
 class OfflineLlmEngine(private val context: Context) {
 
+    data class ProbeResult(
+        val success: Boolean,
+        val supportsVision: Boolean,
+        val supportsText: Boolean,
+        val useVisionBackendAtInit: Boolean
+    )
+
     private var engine: Engine? = null
     private var loadedModelPath: String? = null
+    private var loadedWithVisionBackend: Boolean = false
 
     suspend fun generate(prompt: String, modelPath: String, image: Bitmap? = null): String =
         withContext(Dispatchers.IO) {
@@ -53,7 +62,6 @@ class OfflineLlmEngine(private val context: Context) {
             }
         }
 
-    /** Streams tokens as they are generated — used for live Coach chat UI. */
     fun generateStream(prompt: String, modelPath: String, image: Bitmap? = null): Flow<String> = flow {
         ensureEngine(modelPath, enableVision = image != null)
         val eng = engine ?: throw IllegalStateException("Offline engine failed to initialize")
@@ -79,24 +87,47 @@ class OfflineLlmEngine(private val context: Context) {
     }.flowOn(Dispatchers.IO)
 
     private suspend fun ensureEngine(modelPath: String, enableVision: Boolean) {
-        if (engine != null && loadedModelPath == modelPath) return
+        val meta = OfflineModelMetadata.load(File(modelPath))
+        val fileName = File(modelPath).name
+        val likelyVision = OfflineModelValidator.likelyVisionModel(fileName)
+
+        if (engine != null && loadedModelPath == modelPath) {
+            val needsVisionReload = enableVision && !loadedWithVisionBackend
+            if (!needsVisionReload) return
+        }
 
         release()
 
         val cacheDir = context.cacheDir.absolutePath
-        val config = EngineConfig(
-            modelPath = modelPath,
-            backend = Backend.CPU(),
-            cacheDir = cacheDir,
-            visionBackend = if (enableVision) Backend.CPU() else null
-        )
+        val visionAttempts = buildList {
+            if (meta?.probeUsedVisionBackend == true || likelyVision || enableVision) add(true)
+            add(false)
+            if (!likelyVision && meta?.probeUsedVisionBackend != true) add(true)
+        }.distinct()
 
-        Log.d(TAG, "Initializing LiteRT-LM: $modelPath (vision=$enableVision)")
-        val newEngine = Engine(config)
-        newEngine.initialize()
-        engine = newEngine
-        loadedModelPath = modelPath
-        Log.d(TAG, "LiteRT-LM ready")
+        var lastError: Exception? = null
+        for (needsVisionBackend in visionAttempts) {
+            val config = EngineConfig(
+                modelPath = modelPath,
+                backend = Backend.CPU(),
+                cacheDir = cacheDir,
+                visionBackend = if (needsVisionBackend) Backend.CPU() else null
+            )
+            try {
+                Log.d(TAG, "Initializing LiteRT-LM: $modelPath (visionBackend=$needsVisionBackend)")
+                val newEngine = Engine(config)
+                newEngine.initialize()
+                engine = newEngine
+                loadedModelPath = modelPath
+                loadedWithVisionBackend = needsVisionBackend
+                Log.d(TAG, "LiteRT-LM ready")
+                return
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "Init failed (visionBackend=$needsVisionBackend)", e)
+            }
+        }
+        throw lastError ?: IllegalStateException("Offline engine failed to initialize")
     }
 
     fun release() {
@@ -107,32 +138,56 @@ class OfflineLlmEngine(private val context: Context) {
         }
         engine = null
         loadedModelPath = null
+        loadedWithVisionBackend = false
     }
 
-    /** Quick init test — returns true if LiteRT-LM can load the model file. */
-    suspend fun probeModel(modelPath: String): Boolean = withContext(Dispatchers.IO) {
-        if (!java.io.File(modelPath).exists()) return@withContext false
-        val probeEngine = Engine(
-            EngineConfig(
-                modelPath = modelPath,
-                backend = Backend.CPU(),
-                cacheDir = context.cacheDir.absolutePath,
-                visionBackend = null
-            )
-        )
-        try {
-            probeEngine.initialize()
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "Probe failed for $modelPath", e)
-            false
-        } finally {
-            try {
-                probeEngine.close()
-            } catch (_: Exception) {
+    /** Tries multiple LiteRT-LM init configs — VLMs (e.g. FastVLM) need visionBackend at init. */
+    suspend fun probeModel(modelPath: String, fileName: String = File(modelPath).name): ProbeResult =
+        withContext(Dispatchers.IO) {
+            if (!File(modelPath).exists()) {
+                return@withContext ProbeResult(false, false, false, false)
             }
+            val likelyVision = OfflineModelValidator.likelyVisionModel(fileName)
+            val likelyEmbedding = OfflineModelValidator.likelyEmbeddingModel(fileName)
+            if (likelyEmbedding) {
+                return@withContext ProbeResult(false, false, false, false)
+            }
+
+            val attempts = buildList {
+                if (likelyVision) add(true)
+                add(false)
+                if (!likelyVision) add(true)
+            }.distinct()
+
+            for (withVisionBackend in attempts) {
+                val probeEngine = Engine(
+                    EngineConfig(
+                        modelPath = modelPath,
+                        backend = Backend.CPU(),
+                        cacheDir = context.cacheDir.absolutePath,
+                        visionBackend = if (withVisionBackend) Backend.CPU() else null
+                    )
+                )
+                try {
+                    probeEngine.initialize()
+                    val supportsVision = withVisionBackend || likelyVision
+                    return@withContext ProbeResult(
+                        success = true,
+                        supportsVision = supportsVision,
+                        supportsText = true,
+                        useVisionBackendAtInit = withVisionBackend
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Probe failed (visionBackend=$withVisionBackend) for $fileName", e)
+                } finally {
+                    try {
+                        probeEngine.close()
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            ProbeResult(false, false, false, false)
         }
-    }
 
     private fun bitmapToJpeg(bitmap: Bitmap, quality: Int = 80): ByteArray {
         val safe = if (bitmap.config == Bitmap.Config.HARDWARE) {

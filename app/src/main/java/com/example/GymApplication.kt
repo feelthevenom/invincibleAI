@@ -6,6 +6,8 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.example.notifications.WaterNotificationHelper
 import com.example.notifications.WorkoutNotificationHelper
 import com.example.data.AppDatabase
@@ -14,12 +16,18 @@ import kotlinx.coroutines.runBlocking
 import com.example.data.GymRepository
 import com.example.data.LocalFoodRepository
 import com.example.data.LocalExerciseRepository
-import com.example.data.api.OpenFoodFactsRepository
+import com.example.data.ExerciseRepository
 
 class GymApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        Thread {
+            try {
+                exerciseRepository
+            } catch (_: Exception) {
+            }
+        }.start()
         WaterNotificationHelper.createChannel(this)
         WorkoutNotificationHelper.createChannel(this)
         rescheduleRemindersIfNeeded()
@@ -45,6 +53,17 @@ class GymApplication : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.25)
+                    .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("food_image_cache"))
+                    .maxSizeBytes(100L * 1024 * 1024)
+                    .build()
+            }
             .components {
                 if (Build.VERSION.SDK_INT >= 28) {
                     add(ImageDecoderDecoder.Factory())
@@ -67,12 +86,20 @@ class GymApplication : Application(), ImageLoaderFactory {
 
     val localFoodRepository by lazy { LocalFoodRepository(this) }
     val localExerciseRepository by lazy { LocalExerciseRepository(this) }
-    val offRepository by lazy { OpenFoodFactsRepository() }
+    val exerciseRepository by lazy { ExerciseRepository(this) }
     val secureStorageManager by lazy { com.example.data.SecureStorageManager(this) }
     val modelDownloadManager by lazy { com.example.data.ModelDownloadManager(this, secureStorageManager) }
     val aiManager by lazy { com.example.data.AiManager(this, secureStorageManager, modelDownloadManager) }
     val exerciseGuideRepository by lazy {
-        com.example.data.ExerciseGuideRepository(this, AppDatabase.getDatabase(this).gymDao())
+        com.example.data.ExerciseGuideRepository(
+            this,
+            AppDatabase.getDatabase(this).gymDao(),
+            exerciseRepository
+        )
+    }
+    val mediaCacheStore by lazy { com.example.data.MediaCacheStore(this) }
+    val workoutMediaEngine by lazy {
+        com.example.data.WorkoutMediaEngine(this, localExerciseRepository, exerciseRepository)
     }
     val coachHistoryRepository by lazy {
         com.example.data.CoachHistoryRepository(AppDatabase.getDatabase(this).gymDao())

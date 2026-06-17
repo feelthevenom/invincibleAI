@@ -34,9 +34,9 @@ class FoodSearchEngine(private val allFoods: List<FoodItem>) {
         return (preferred.take(limit) + remaining).take(limit)
     }
 
-    /** Search foods by query with smart ranking. */
+    /** Search foods by query with smart + fuzzy ranking. */
     fun search(query: String, cuisinePreferences: List<String>, limit: Int = 40): List<FoodItem> {
-        val q = query.trim().lowercase()
+        val q = query.trim()
         if (q.isBlank()) return suggestions(cuisinePreferences)
 
         val scored = allFoods.mapNotNull { food ->
@@ -51,23 +51,9 @@ class FoodSearchEngine(private val allFoods: List<FoodItem>) {
     }
 
     private fun computeScore(food: FoodItem, query: String, cuisinePreferences: List<String>): Int {
+        val q = query.trim().lowercase()
         val nameLower = food.name.lowercase()
-        var score = 0
-
-        // Name matching
-        when {
-            nameLower == query -> score += 1000
-            nameLower.startsWith(query) -> score += 500
-            else -> {
-                // Check if any word in the name starts with the query
-                val words = nameLower.split(" ", "(", ")", "/", "-")
-                if (words.any { it.startsWith(query) }) {
-                    score += 200
-                } else if (nameLower.contains(query)) {
-                    score += 100
-                }
-            }
-        }
+        var score = FuzzyMatcher.score(q, food.name)
 
         // Alias matching
         if (score == 0 || score < 400) {

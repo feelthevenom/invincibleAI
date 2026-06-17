@@ -1,0 +1,68 @@
+{
+  "guides": {
+    "face_pull": {
+      "targetMuscles": ["rear deltoids", "rhomboids", "middle trapezius"],
+      "bodyParts": ["shoulders", "upper back"],
+      "equipments": ["cable", "rope attachment"],
+      "steps": [
+        "Step:1 Set a cable pulley to upper-chest height and attach a rope handle.",
+        "Step:2 Grip the rope with thumbs toward you and palms facing each other.",
+        "Step:3 Step back until arms are extended and there is light tension on the cable.",
+        "Step:4 Stand tall with feet hip-width, brace your core, and keep shoulders down.",
+        "Step:5 Pull the rope toward your forehead or upper nose while driving elbows out and back.",
+        "Step:6 Squeeze rear delts and upper back for one second without shrugging.",
+        "Step:7 Return slowly with control until arms are nearly straight.",
+        "Step:8 Repeat for reps, keeping wrists neutral and torso stable."
+      ]
+    },
+    "pull_up": {
+      "targetMuscles": ["latissimus dorsi", "biceps brachii", "rear deltoids"],
+      "bodyParts": ["back", "arms"],
+      "equipments": ["pull-up bar"],
+      "steps": [
+        "Step:1 Hang from the bar with hands slightly wider than shoulders, palms away or neutral.",
+        "Step:2 Depress your shoulder blades and brace your core.",
+        "Step:3 Pull your chest toward the bar by driving elbows down and back.",
+        "Step:4 Pause briefly at the top with chin near bar height.",
+        "Step:5 Lower under control to a full hang without swinging."
+      ]
+    },
+    "bench_press": {
+      "targetMuscles": ["pectorals", "anterior deltoids", "triceps brachii"],
+      "bodyParts": ["chest", "shoulders", "arms"],
+      "equipments": ["barbell", "bench"],
+      "steps": [
+        "Step:1 Lie on the bench with eyes under the bar, feet flat on the floor.",
+        "Step:2 Grip the bar slightly wider than shoulders and unrack to arm's length.",
+        "Step:3 Lower the bar to mid-chest with elbows at roughly 45 degrees.",
+        "Step:4 Press the bar up in a slight arc until arms are extended.",
+        "Step:5 Keep shoulder blades retracted and wrists stacked over elbows."
+      ]
+    },
+    "squat": {
+      "targetMuscles": ["quadriceps", "gluteus maximus", "hamstrings"],
+      "bodyParts": ["legs", "glutes"],
+      "equipments": ["barbell", "squat rack"],
+      "steps": [
+        "Step:1 Set the bar on upper traps, feet shoulder-width, toes slightly out.",
+        "Step:2 Brace your core and take a breath before descending.",
+        "Step:3 Sit hips back and down while keeping chest up and knees tracking over toes.",
+        "Step:4 Reach at least parallel depth with a neutral spine.",
+        "Step:5 Drive through mid-foot to stand, exhaling near the top."
+      ]
+    },
+    "deadlift": {
+      "targetMuscles": ["hamstrings", "gluteus maximus", "erector spinae"],
+      "bodyParts": ["back", "legs", "glutes"],
+      "equipments": ["barbell"],
+      "steps": [
+        "Step:1 Stand with mid-foot under the bar, feet hip-width.",
+        "Step:2 Hinge and grip the bar just outside your legs.",
+        "Step:3 Pull slack out of the bar, flatten your back, and brace your core.",
+        "Step:4 Drive the floor away and keep the bar close to your legs.",
+        "Step:5 Stand tall at lockout without hyperextending your lower back.",
+        "Step:6 Hinge back down with control to reset each rep."
+      ]
+    }
+  }
+}

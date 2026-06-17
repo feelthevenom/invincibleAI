@@ -230,7 +230,7 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
                         )
                     }
                 } else {
-                    item { OfflineActivePicker(viewModel, profile, installedModels) }
+                    item { OfflineActivePicker(viewModel, profile, installedModels, forUnified = true) }
                 }
             } else {
                 item {
@@ -615,7 +615,6 @@ fun AiSettingsScreen(viewModel: GymViewModel, onBack: () -> Unit) {
             builtInStates = builtInStates,
             activeModelId = profile.offlineModelId,
             onDismiss = { showOfflineModelsSheet = false },
-            onSelectModel = { viewModel.selectOfflineModel(it) },
             onDownload = { viewModel.startModelDownload(it) },
             onCancelDownload = { viewModel.cancelModelDownload(it) },
             onDelete = { viewModel.deleteModel(it) },
@@ -689,33 +688,14 @@ private enum class PickerTarget {
 
 @Composable
 private fun ModelModeToggle(split: Boolean, onUnified: () -> Unit, onSplit: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
-            .padding(4.dp)
-    ) {
-        listOf(false to "UNIFIED MODEL", true to "SPLIT MODELS").forEach { (isSplit, label) ->
-            val selected = split == isSplit
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
-                    .clickable { if (isSplit) onSplit() else onUnified() }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
+    AnimatedSegmentedControl(
+        options = listOf("Unified model", "Split models"),
+        selectedIndex = if (split) 1 else 0,
+        onSelected = { index ->
+            if (index == 0) onUnified() else onSplit()
+        },
+        labelStyle = MaterialTheme.typography.labelMedium
+    )
 }
 
 @Composable
@@ -792,22 +772,35 @@ private fun OfflineActivePicker(
     profile: com.example.data.UserProfile,
     installedModels: List<com.example.data.ModelDownloadManager.InstalledOfflineModel>,
     forText: Boolean = false,
-    forVision: Boolean = false
+    forVision: Boolean = false,
+    forUnified: Boolean = false
 ) {
-    if (installedModels.isEmpty()) {
-        Text("No on-device model installed. Download or import below.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val filtered = remember(installedModels, forText, forVision, forUnified) {
+        when {
+            forVision || forUnified -> installedModels.filter { it.supportsVision }
+            forText -> installedModels.filter { it.supportsText }
+            else -> installedModels.filter { it.supportsVision }
+        }
+    }
+    if (filtered.isEmpty()) {
+        val hint = when {
+            forVision || forUnified -> "No vision-capable offline model installed. Import or download a vision LLM (e.g. Gemma 4 E2B, FastVLM)."
+            forText -> "No text offline model installed. Download or import a LiteRT-LM model below."
+            else -> "No on-device model installed. Download or import below."
+        }
+        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val ids = installedModels.map { it.id }
+    val ids = filtered.map { it.id }
     val index = ids.indexOf(profile.offlineModelId).coerceAtLeast(0)
     WheelPickerField(
         label = when {
             forText -> "On-device text model"
             forVision -> "On-device vision model"
-            else -> "On-device model"
+            else -> "On-device model (vision)"
         },
-        items = installedModels.map { "${it.displayName}" },
-        selectedIndex = index,
+        items = filtered.map { "${it.displayName} · ${it.capabilityLabel}" },
+        selectedIndex = if (ids.contains(profile.offlineModelId)) index else 0,
         onConfirm = { viewModel.updateOfflineModelId(ids[it]) }
     )
 }

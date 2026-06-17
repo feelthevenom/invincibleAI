@@ -35,13 +35,21 @@ class LocalExerciseRepository(context: Context) {
 
     fun search(query: String, routineFilter: String? = null): List<ExerciseItem> {
         val q = query.trim().lowercase()
-        return allExercises.filter { exercise ->
-            if (!matchesRoutine(exercise, routineFilter)) return@filter false
-            if (q.isBlank()) return@filter true
+        val pool = if (q.isNotEmpty()) {
+            allExercises
+        } else {
+            allExercises.filter { matchesRoutine(it, routineFilter) }
+        }
+        if (q.isBlank()) return pool.sortedBy { it.name.lowercase() }
+        return pool.filter { exercise ->
             exercise.name.lowercase().contains(q) ||
                 exercise.exerciseType.lowercase().contains(q) ||
-                exercise.aliases.any { it.lowercase().contains(q) }
-        }.sortedByDescending { it.name.lowercase().startsWith(q) }
+                exercise.aliases.any { it.lowercase().contains(q) } ||
+                exercise.equipment.lowercase().contains(q)
+        }.sortedWith(
+            compareByDescending<ExerciseItem> { it.name.lowercase().startsWith(q) }
+                .thenBy { it.name.lowercase() }
+        )
     }
 
     fun forRoutine(routine: String): List<ExerciseItem> =
@@ -64,17 +72,35 @@ class LocalExerciseRepository(context: Context) {
         }
     }
 
-    fun suggestions(routine: String, limit: Int = 12): List<ExerciseItem> =
-        forRoutine(routine).take(limit)
+    fun suggestions(routine: String, limit: Int = 12): List<ExerciseItem> {
+        val filtered = forRoutine(routine)
+        return (if (filtered.isEmpty()) allExercises else filtered).take(limit)
+    }
+
+    /** Maps workout routine names (incl. built-ins like Upper Body) to exercise routine tags. */
+    fun resolveRoutineTags(routineName: String): Set<String>? {
+        val n = routineName.trim().lowercase()
+        return when {
+            n == "push" || n.contains("push") -> setOf("Push")
+            n == "pull" || n.contains("pull") -> setOf("Pull")
+            n.contains("leg") -> setOf("Legs", "Lower", "Glutes")
+            n.contains("upper") -> setOf("Upper", "Push", "Pull", "Chest", "Back", "Shoulders", "Biceps", "Triceps")
+            n.contains("lower") -> setOf("Lower", "Legs", "Glutes")
+            n.contains("full") -> setOf("Full Body")
+            n.contains("core") || n.contains("abs") -> setOf("Full Body", "Core")
+            n.contains("cardio") -> setOf("Cardio", "Full Body")
+            else -> null
+        }
+    }
 
     private fun matchesRoutine(exercise: ExerciseItem, routineFilter: String?): Boolean {
         if (routineFilter.isNullOrBlank()) return true
-        if (exercise.routines.any { it.equals(routineFilter, ignoreCase = true) }) return true
-        if (routineFilter.equals("Cardio", ignoreCase = true) &&
-            exercise.exerciseType.equals("Cardio", ignoreCase = true)
-        ) {
+        val tags = resolveRoutineTags(routineFilter) ?: return true
+        if (tags.contains("Cardio") && (exercise.isCardio || exercise.exerciseType.equals("Cardio", true))) {
             return true
         }
+        if (exercise.routines.any { tag -> tags.any { it.equals(tag, ignoreCase = true) } }) return true
+        if (tags.any { it.equals(exercise.exerciseType, ignoreCase = true) }) return true
         return false
     }
 
@@ -85,21 +111,24 @@ class LocalExerciseRepository(context: Context) {
                 .add(KotlinJsonAdapterFactory())
                 .build()
                 .adapter(BundledExercisesFile::class.java)
-            adapter.fromJson(json)?.exercises.orEmpty().map { entry ->
-                val isCardio = entry.type.equals("Cardio", ignoreCase = true)
-                ExerciseItem(
-                    id = entry.id,
-                    name = entry.name,
-                    exerciseType = entry.type,
-                    routines = entry.routines,
-                    defaultSets = if (isCardio) 1 else entry.defaultSets,
-                    defaultReps = if (isCardio) 0 else entry.defaultReps,
-                    aliases = entry.aliases,
-                    equipment = entry.equipment,
-                    secondaryMuscles = entry.secondaryMuscles,
-                    isCardio = isCardio
-                )
-            }
+            val seen = mutableSetOf<String>()
+            adapter.fromJson(json)?.exercises.orEmpty()
+                .filter { seen.add(it.id) }
+                .map { entry ->
+                    val isCardio = entry.type.equals("Cardio", ignoreCase = true)
+                    ExerciseItem(
+                        id = entry.id,
+                        name = entry.name,
+                        exerciseType = entry.type,
+                        routines = entry.routines,
+                        defaultSets = if (isCardio) 1 else entry.defaultSets,
+                        defaultReps = if (isCardio) 0 else entry.defaultReps,
+                        aliases = entry.aliases,
+                        equipment = entry.equipment,
+                        secondaryMuscles = entry.secondaryMuscles,
+                        isCardio = isCardio
+                    )
+                }
         } catch (_: Exception) {
             emptyList()
         }

@@ -46,6 +46,29 @@ class GymRepository(private val gymDao: GymDao) {
         gymDao.deleteCustomFood(food)
     }
 
+    suspend fun getAllCachedFoodProducts(): List<CachedFoodProduct> =
+        gymDao.getAllCachedFoodProducts()
+
+    suspend fun getCachedFoodByExternalId(externalId: String): CachedFoodProduct? =
+        gymDao.getCachedFoodByExternalId(externalId)
+
+    suspend fun cacheFoodProduct(product: CachedFoodProduct) {
+        gymDao.insertCachedFoodProduct(product)
+    }
+
+    suspend fun getFoodImageCache(normalizedName: String): FoodImageCacheEntry? =
+        gymDao.getFoodImageCache(normalizedName)
+
+    suspend fun cacheFoodImage(normalizedName: String, imageUrl: String, source: String) {
+        gymDao.upsertFoodImageCache(
+            FoodImageCacheEntry(
+                normalizedName = normalizedName,
+                imageUrl = imageUrl,
+                source = source
+            )
+        )
+    }
+
     suspend fun deleteSet(set: ExerciseSet) {
         gymDao.deleteSet(set)
     }
@@ -183,6 +206,18 @@ class GymRepository(private val gymDao: GymDao) {
 
     suspend fun deleteNotification(id: Int) {
         gymDao.deleteNotification(id)
+    }
+
+    suspend fun clearAllNotifications() {
+        gymDao.clearAllNotifications()
+    }
+
+    suspend fun clearNotificationsByCategory(category: String) {
+        gymDao.clearNotificationsByCategory(category)
+    }
+
+    suspend fun clearNotificationsExceptCategory(category: String) {
+        gymDao.clearNotificationsExceptCategory(category)
     }
 
     suspend fun normalizeProfileAfterRestore(): UserProfile? {

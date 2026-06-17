@@ -47,6 +47,18 @@ object OfflineModelConfig {
     fun specForBuiltInFile(fileName: String): ModelSpec? =
         ALL.find { it.fileName.equals(fileName, ignoreCase = true) }
 
+    /** Match official Gemma 4 filenames from Hugging Face (may differ from bundled download name). */
+    fun matchImportedFile(fileName: String, fileSizeBytes: Long): ModelSpec? {
+        val lower = fileName.lowercase()
+        val is2b = lower.contains("gemma") && lower.contains("e2b")
+        val is4b = lower.contains("gemma") && lower.contains("e4b")
+        return when {
+            is2b && fileSizeBytes >= 1_800_000_000L -> OFFLINE_2B
+            is4b && fileSizeBytes >= 2_800_000_000L -> OFFLINE_4B
+            else -> null
+        }
+    }
+
     /** Minimum size for unknown imports — built-in specs use stricter checks. */
     fun isValidImportedFile(lengthBytes: Long): Boolean = lengthBytes >= 50_000_000L
 

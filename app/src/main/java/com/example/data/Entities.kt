@@ -2,6 +2,7 @@ package com.example.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 
 @Entity(tableName = "user_profile")
 data class UserProfile(
@@ -38,7 +39,7 @@ data class UserProfile(
     val gymLocation: String = "",
     val aiProvider: String = "gemini",       // "gemini", "groq", "offline"
     val aiModelId: String = "gemini-2.5-flash",
-    val offlineModelId: String = "offline_2b",   // which offline model to use when provider=offline
+    val offlineModelId: String = "offline_2b",
     val aiSplitModels: Boolean = false,
     val aiTextProvider: String = "gemini",
     val aiTextModelId: String = "gemini-2.5-flash",
@@ -63,7 +64,8 @@ data class UserProfile(
     val workoutReminderRepeat: Boolean = true,
     val workoutAlarmSoundUri: String = "", // empty = system default alarm
     val themeMode: String = "system", // system | light | dark
-    val notificationsLastViewedAt: Long = 0L
+     val notificationsLastViewedAt: Long = 0L,
+    val aiHybridInference: Boolean = true
 )
 
 @Entity(tableName = "daily_goal_snapshots")
@@ -124,6 +126,39 @@ data class CustomFoodItem(
     val carbsPer100g: Float,
     val fatPer100g: Float,
     val fiberPer100g: Float,
+    val imageUrl: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/** Persistent cache for food images resolved from the internet (by normalized name). */
+@Entity(tableName = "food_image_cache")
+data class FoodImageCacheEntry(
+    @PrimaryKey val normalizedName: String,
+    val imageUrl: String,
+    val source: String = "wikimedia",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+/** Cached packaged products from Open Food Facts or online AI lookup (RAG cache). */
+@Entity(
+    tableName = "cached_food_products",
+    indices = [Index(value = ["searchKey"])]
+)
+data class CachedFoodProduct(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    /** Lowercase normalized string used for fuzzy search. */
+    val searchKey: String,
+    val brand: String = "",
+    val caloriesPer100g: Int,
+    val proteinPer100g: Float,
+    val carbsPer100g: Float,
+    val fatPer100g: Float,
+    val fiberPer100g: Float,
+    val volumeBased: Boolean = false,
+    val source: String = "cached",
+    val externalId: String = "",
+    val imageUrl: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -183,6 +218,8 @@ data class MealEntry(
     val mealType: String,
     val foodName: String = "",
     val weightGrams: Int = 0,
+    val servingLabel: String = "",
+    val servingQuantity: Float = 0f,
     val calories: Int,
     val protein: Int,
     val carbs: Int,

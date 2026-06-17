@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -44,7 +45,12 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.AiRouteResolver
 import com.example.GymViewModel
 import com.example.data.CustomFoodItem
+import com.example.data.FoodMacroFormat
+import com.example.data.FoodImageResolver
 import com.example.data.FoodItem
+import com.example.data.FoodQuantityOptions
+import com.example.data.FoodServingCatalog
+import com.example.data.FoodServingUnit
 import com.example.data.FoodNutritionCalculator
 import com.example.data.MealEntry
 import com.example.data.MealTypes
@@ -279,16 +285,22 @@ fun MealDetailOverlay(
                     is MealSheetPage.CustomFood -> CustomFoodCreatePage(
                         viewModel = viewModel,
                         initialName = currentPage.prefilledName,
-                        onSave = { item: CustomFoodItem ->
+                        onSave = { item, isVolume ->
                             viewModel.addCustomFoodAndReturn(item) { food ->
-                                page = MealSheetPage.FoodWeight(food)
+                                page = MealSheetPage.FoodWeight(
+                                    if (isVolume) food.copy(volumeBased = true) else food
+                                )
                             }
                         }
                     )
-                    is MealSheetPage.FoodWeight -> FoodWeightPage(
+                    is MealSheetPage.FoodWeight -> FoodServingPage(
                         food = currentPage.food,
-                        onAdd = { grams: Int ->
-                            viewModel.addFoodToMeal(mealType, currentPage.food, grams, logDayStart)
+                        viewModel = viewModel,
+                        onAdd = { grams, label, qty ->
+                            viewModel.addFoodToMeal(
+                                mealType, currentPage.food, grams, logDayStart,
+                                servingLabel = label, servingQuantity = qty
+                            )
                             page = MealSheetPage.Detail
                         }
                     )
@@ -391,7 +403,7 @@ private fun FoodSearchPage(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "700+ foods · Real-time search · Type to find anything",
+            "700+ foods · Fuzzy search · Open Food Facts · Cached products",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
             modifier = Modifier.padding(horizontal = 20.dp)
@@ -432,7 +444,7 @@ private fun FoodSearchPage(
                 item(key = "custom_header") {
                     SectionHeader("YOUR CUSTOM ITEMS")
                 }
-                items(customFoods, key = { "custom_${it.id}" }) { cf ->
+                items(customFoods, key = { "section_custom_${it.id}" }) { cf ->
                     val food = FoodNutritionCalculator.fromCustomEntity(cf)
                     FoodListItem(
                         name = food.name,
@@ -449,10 +461,23 @@ private fun FoodSearchPage(
                 item(key = "local_header") {
                     SectionHeader(localLabel)
                 }
-                items(searchState.localResults, key = { it.id }) { food ->
+                itemsIndexed(searchState.localResults, key = { index, item -> "local_${item.id}_$index" }) { _, food ->
                     FoodListItem(
                         name = food.name,
-                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · P${food.proteinPer100g.toInt()}g C${food.carbsPer100g.toInt()}g F${food.fatPer100g.toInt()}g",
+                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · ${FoodMacroFormat.compactPcf(food.proteinPer100g, food.carbsPer100g, food.fatPer100g)}",
+                        onClick = { onFoodSelected(food) }
+                    )
+                }
+            }
+
+            if (searchState.cachedResults.isNotEmpty()) {
+                item(key = "cached_header") {
+                    SectionHeader("SAVED & PREVIOUS SEARCHES")
+                }
+                itemsIndexed(searchState.cachedResults, key = { index, item -> "cached_${item.id}_$index" }) { _, food ->
+                    FoodListItem(
+                        name = food.name,
+                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · Cached",
                         onClick = { onFoodSelected(food) }
                     )
                 }
@@ -482,11 +507,42 @@ private fun FoodSearchPage(
                 item(key = "api_header") {
                     SectionHeader("PACKAGED PRODUCTS · Open Food Facts")
                 }
-                items(searchState.apiResults, key = { it.id }) { food ->
+                itemsIndexed(searchState.apiResults, key = { index, item -> "api_${item.id}_$index" }) { _, food ->
                     FoodListItem(
                         name = food.name,
-                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · P${food.proteinPer100g.toInt()}g C${food.carbsPer100g.toInt()}g F${food.fatPer100g.toInt()}g",
+                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · ${FoodMacroFormat.compactPcf(food.proteinPer100g, food.carbsPer100g, food.fatPer100g)}",
                         onClick = { onFoodSelected(food) }
+                    )
+                }
+            }
+
+            if (searchState.aiLookupResults.isNotEmpty()) {
+                item(key = "ai_header") {
+                    SectionHeader("AI PRODUCT LOOKUP · verify label if unsure")
+                }
+                itemsIndexed(searchState.aiLookupResults, key = { index, item -> "ai_${item.id}_$index" }) { _, food ->
+                    FoodListItem(
+                        name = food.name,
+                        subtitle = "Per 100g: ${food.caloriesPer100g} kcal · P${FoodMacroFormat.grams(food.proteinPer100g)}g · Estimated",
+                        onClick = { onFoodSelected(food) }
+                    )
+                }
+            }
+
+            if (searchState.query.length >= 3 &&
+                searchState.localResults.isEmpty() &&
+                searchState.cachedResults.isEmpty() &&
+                searchState.apiResults.isEmpty() &&
+                searchState.aiLookupResults.isEmpty() &&
+                !searchState.isApiLoading
+            ) {
+                item(key = "no_results") {
+                    Text(
+                        "No match yet. Try brand + product name (e.g. \"Nakpro Gold whey\"). " +
+                            "Online AI lookup runs when Open Food Facts has no hit.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
             }
@@ -526,7 +582,7 @@ private fun SectionHeader(text: String) {
 private fun CustomFoodCreatePage(
     viewModel: GymViewModel,
     initialName: String = "",
-    onSave: (CustomFoodItem) -> Unit
+    onSave: (CustomFoodItem, volumeBased: Boolean) -> Unit
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var calories by remember { mutableStateOf("") }
@@ -534,12 +590,14 @@ private fun CustomFoodCreatePage(
     var carbs by remember { mutableStateOf("") }
     var fat by remember { mutableStateOf("") }
     var fiber by remember { mutableStateOf("") }
+    var volumeBased by remember { mutableStateOf(false) }
     
     var isAiLoading by remember { mutableStateOf(false) }
     val profile by viewModel.userProfile.collectAsState()
     val scope = rememberCoroutineScope()
     var aiSuggestions by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
     var showSuggestions by remember { mutableStateOf(false) }
+    var pendingImageUrl by remember { mutableStateOf<String?>(null) }
 
     fun triggerAiAutofill() {
         if (name.isBlank() || !viewModel.isAiConfigured()) return
@@ -549,6 +607,7 @@ private fun CustomFoodCreatePage(
             if (suggestions.isNotEmpty()) {
                 aiSuggestions = suggestions
                 showSuggestions = true
+                pendingImageUrl = viewModel.fetchFoodImageForName(suggestions.first().name)
             }
             isAiLoading = false
         }
@@ -562,7 +621,7 @@ private fun CustomFoodCreatePage(
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("Enter nutrition per 100g", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Enter nutrition per ${if (volumeBased) "100ml" else "100g"}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (viewModel.isAiConfigured()) {
                 TextButton(onClick = { triggerAiAutofill() }, enabled = !isAiLoading && name.isNotBlank()) {
                     if (isAiLoading) {
@@ -592,13 +651,24 @@ private fun CustomFoodCreatePage(
                                 carbs = suggestion.carbsPer100g.toString()
                                 fat = suggestion.fatPer100g.toString()
                                 fiber = suggestion.fiberPer100g.toString()
+                                volumeBased = suggestion.volumeBased ||
+                                    com.example.data.FoodServingCatalog.isVolumeBased(suggestion)
                                 showSuggestions = false
+                                scope.launch {
+                                    pendingImageUrl = suggestion.imageUrl?.takeIf { it.isNotBlank() }
+                                        ?: viewModel.fetchFoodImageForName(suggestion.name)
+                                }
                             }
                             .padding(vertical = 8.dp, horizontal = 4.dp),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        pendingImageUrl?.let { url ->
+            FoodImagePreview(imageUrl = url)
             Spacer(modifier = Modifier.height(12.dp))
         }
 
@@ -621,8 +691,10 @@ private fun CustomFoodCreatePage(
                         proteinPer100g = protein.toFloatOrNull() ?: 0f,
                         carbsPer100g = carbs.toFloatOrNull() ?: 0f,
                         fatPer100g = fat.toFloatOrNull() ?: 0f,
-                        fiberPer100g = fiber.toFloatOrNull() ?: 0f
-                    )
+                        fiberPer100g = fiber.toFloatOrNull() ?: 0f,
+                        imageUrl = pendingImageUrl.orEmpty()
+                    ),
+                    volumeBased
                 )
             },
             enabled = name.isNotBlank() && (calories.toIntOrNull() ?: 0) > 0,
@@ -668,6 +740,7 @@ private fun FoodListItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MealDetailPage(
     budget: MealTypes.MealBudget,
@@ -725,7 +798,7 @@ private fun MealDetailPage(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
-                    items(entries, key = { it.id }) { entry ->
+                    items(entries, key = { "logged_${it.id}" }) { entry ->
                         LoggedFoodRow(
                             entry = entry,
                             onDelete = { entryToDelete = entry },
@@ -834,65 +907,32 @@ private fun MealDetailPage(
     }
 
     if (entryToEdit != null) {
-        EditMealEntryDialog(
-            entry = entryToEdit!!,
-            onDismiss = { entryToEdit = null },
-            onSave = { updated ->
-                viewModel.updateMeal(updated)
-                entryToEdit = null
-            }
-        )
-    }
-}
-
-@Composable
-private fun EditMealEntryDialog(entry: MealEntry, onDismiss: () -> Unit, onSave: (MealEntry) -> Unit) {
-    var weight by remember(entry.id) { mutableStateOf(entry.weightGrams.toString()) }
-    val weightInt = weight.toIntOrNull() ?: 0
-    val preview = remember(entry, weightInt) {
-        if (weightInt > 0) FoodNutritionCalculator.recalculateEntryForWeight(entry, weightInt) else null
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Weight: ${entry.foodName}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = weight,
-                    onValueChange = { v ->
-                        if (v.all { it.isDigit() } && v.length <= 5) weight = v
-                    },
-                    label = { Text("Weight") },
-                    suffix = { Text("g") },
-                    singleLine = true
+        val entry = entryToEdit!!
+        val food = remember(entry.id) { FoodNutritionCalculator.per100FromMealEntry(entry) }
+        if (food != null) {
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ModalBottomSheet(
+                onDismissRequest = { entryToEdit = null },
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            ) {
+                FoodServingPage(
+                    food = food,
+                    viewModel = viewModel,
+                    initialQuantity = entry.servingQuantity.toDouble().takeIf { it > 0 } ?: 1.0,
+                    initialServingLabel = entry.servingLabel,
+                    initialWeightGrams = entry.weightGrams,
+                    confirmLabel = "SAVE",
+                    onAdd = { grams, label, qty ->
+                        FoodNutritionCalculator.recalculateEntryForServing(entry, food, grams, label, qty)
+                            ?.let { viewModel.updateMeal(it) }
+                        entryToEdit = null
+                    }
                 )
-                if (preview != null) {
-                    Text(
-                        "Calculated for ${preview.weightGrams}g",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "${preview.calories} kcal · P${preview.protein}g · C${preview.carbs}g · F${preview.fat}g · Fiber ${preview.fiber}g",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else if (weight.isNotEmpty() && weightInt <= 0) {
-                    Text("Enter a valid weight in grams", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { preview?.let(onSave) },
-                enabled = preview != null
-            ) { Text("Confirm") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
+    }
 }
 
 @Composable
@@ -1024,10 +1064,63 @@ private fun PlateAnalysisPage(
 }
 
 @Composable
-private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
-    var grams by remember { mutableStateOf("100") }
-    val gramsInt = grams.toIntOrNull() ?: 0
-    val preview = if (gramsInt > 0) FoodNutritionCalculator.nutritionForWeight(food, gramsInt) else null
+private fun FoodServingPage(
+    food: FoodItem,
+    viewModel: GymViewModel,
+    initialQuantity: Double = 1.0,
+    initialServingLabel: String = "",
+    initialWeightGrams: Int = 0,
+    confirmLabel: String = "ADD",
+    onAdd: (grams: Int, servingLabel: String, servingQuantity: Float) -> Unit
+) {
+    var aiUnits by remember { mutableStateOf<List<FoodServingUnit>>(emptyList()) }
+    var loadingAi by remember { mutableStateOf(false) }
+    var showSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val cs = MaterialTheme.colorScheme
+
+    LaunchedEffect(food.id, food.name) {
+        val kind = FoodServingCatalog.classify(food)
+        val needsAi = food.isCustom ||
+            kind == com.example.data.FoodMeasureKind.GENERIC ||
+            kind == com.example.data.FoodMeasureKind.LIQUID ||
+            food.source in setOf("openfoodfacts", "ai_lookup", "cached")
+        if (needsAi && viewModel.isAiConfigured()) {
+            loadingAi = true
+            aiUnits = viewModel.generateFoodServingUnits(food)
+            loadingAi = false
+        }
+    }
+
+    val units = remember(food, aiUnits) { FoodServingCatalog.unitsFor(food, aiUnits) }
+    var selectedUnit by remember(food) { mutableStateOf(FoodServingCatalog.defaultUnit(food)) }
+    var quantity by remember { mutableDoubleStateOf(initialQuantity) }
+
+    LaunchedEffect(units, initialServingLabel, initialWeightGrams) {
+        if (initialServingLabel.isNotBlank()) {
+            selectedUnit = FoodServingCatalog.unitFromEntry(
+                food,
+                aiUnits,
+                initialServingLabel,
+                initialQuantity.toFloat(),
+                initialWeightGrams.coerceAtLeast(1)
+            )
+        } else if (units.none { it.id == selectedUnit.id }) {
+            selectedUnit = FoodServingCatalog.defaultUnit(food, aiUnits)
+        }
+    }
+
+    val weightGrams = FoodServingCatalog.gramsFor(selectedUnit, quantity)
+    val preview = if (weightGrams > 0) FoodNutritionCalculator.nutritionForWeight(food, weightGrams) else null
+    val basisLabel = FoodServingCatalog.nutritionBasisLabel(food)
+    val netLabel = FoodServingCatalog.netWeightLabel(food, selectedUnit, quantity, weightGrams)
+
+    var imageUrl by remember(food.id) { mutableStateOf(FoodImageResolver.resolveImmediate(food)) }
+    LaunchedEffect(food.id, food.name) {
+        if (imageUrl.isNullOrBlank()) {
+            imageUrl = viewModel.resolveFoodImageUrl(food)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1036,49 +1129,124 @@ private fun FoodWeightPage(food: FoodItem, onAdd: (Int) -> Unit) {
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 20.dp)
     ) {
-        Text("Nutrition per 100g", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Nutrition per $basisLabel",
+            style = MaterialTheme.typography.labelMedium,
+            color = cs.onSurfaceVariant
+        )
         Spacer(modifier = Modifier.height(8.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp))
+                .background(cs.surfaceVariant.copy(0.3f), RoundedCornerShape(12.dp))
                 .padding(16.dp)
         ) {
             Text(
-                "${food.caloriesPer100g} kcal · Protein ${food.proteinPer100g}g · Carbs ${food.carbsPer100g}g · Fat ${food.fatPer100g}g · Fiber ${food.fiberPer100g}g",
+                FoodMacroFormat.per100gLine(
+                    food.caloriesPer100g,
+                    food.proteinPer100g,
+                    food.carbsPer100g,
+                    food.fatPer100g,
+                    food.fiberPer100g
+                ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = cs.onSurface
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        OnboardingTextField(
-            label = "Weight",
-            value = grams,
-            onValueChange = { v -> if (v.all { it.isDigit() } && v.length <= 4) grams = v },
-            suffix = "g"
-        )
-        preview?.let { n ->
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("CALCULATED FOR ${gramsInt}g", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NutrientChip("${n.calories} kcal", MaterialTheme.colorScheme.primary)
-                NutrientChip("P ${n.protein}g", MaterialTheme.colorScheme.secondary)
-                NutrientChip("C ${n.carbs}g", MaterialTheme.colorScheme.tertiary)
-                NutrientChip("F ${n.fat}g", MaterialTheme.colorScheme.error)
+
+        if (imageUrl != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            FoodImagePreview(imageUrl = imageUrl)
+        }
+
+        if (loadingAi) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GymLoadingIndicatorSmall(modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("AI suggesting measures…", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Quantity", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                ServingQuantityField(
+                    quantity = quantity,
+                    onQuantityChange = { quantity = it },
+                    onOpenPicker = { showSheet = true }
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Measure", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                ServingMeasureField(
+                    measureLabel = selectedUnit.label,
+                    onOpenPicker = { showSheet = true }
+                )
+            }
+        }
+
+        preview?.let { n ->
+            val macroFactor = weightGrams / 100f
+            Spacer(modifier = Modifier.height(24.dp))
+            FoodMacroBreakdownCard(
+                calories = n.calories,
+                protein = food.proteinPer100g * macroFactor,
+                carbs = food.carbsPer100g * macroFactor,
+                fat = food.fatPer100g * macroFactor,
+                fiber = food.fiberPer100g * macroFactor,
+                netWeightLabel = netLabel,
+                onNetWeightClick = { showSheet = true }
+            )
+        }
+
+        if (food.isCustom && viewModel.isAiConfigured() && aiUnits.isEmpty() && !loadingAi) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = {
+                scope.launch {
+                    loadingAi = true
+                    aiUnits = viewModel.generateFoodServingUnits(food)
+                    loadingAi = false
+                }
+            }) {
+                Text("✨ Suggest measures with AI")
+            }
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
         Button(
-            onClick = { if (gramsInt > 0) onAdd(gramsInt) },
-            enabled = gramsInt > 0,
+            onClick = {
+                if (weightGrams > 0) {
+                    onAdd(weightGrams, selectedUnit.label, quantity.toFloat())
+                }
+            },
+            enabled = weightGrams > 0,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
+            colors = ButtonDefaults.buttonColors(containerColor = cs.primary, contentColor = cs.onPrimary)
         ) {
-            Text("Add to Meal", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp))
+            Text(confirmLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showSheet) {
+        FoodQuantityMeasureSheet(
+            quantity = quantity,
+            units = units,
+            selectedUnit = selectedUnit,
+            onQuantityChange = { quantity = it },
+            onUnitChange = { selectedUnit = it },
+            onDismiss = { showSheet = false },
+            onDone = { showSheet = false }
+        )
     }
 }
 
@@ -1107,7 +1275,12 @@ private fun LoggedFoodRow(entry: MealEntry, onDelete: () -> Unit, onEdit: () -> 
     ) {
         Column(Modifier.weight(1f)) {
             Text(entry.foodName, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
-            Text("${entry.weightGrams}g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val servingText = if (entry.servingLabel.isNotBlank() && entry.servingQuantity > 0f) {
+                "${FoodQuantityOptions.format(entry.servingQuantity.toDouble())} ${entry.servingLabel} · ${entry.weightGrams}g"
+            } else {
+                "${entry.weightGrams}g"
+            }
+            Text(servingText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.End) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -34,17 +35,27 @@ fun WelcomeScreen(onFinished: () -> Unit) {
         onFinished()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF1c1c1e), Color(0xFF0a0a0a)),
-                    center = Offset(Float.POSITIVE_INFINITY / 2, Float.POSITIVE_INFINITY / 2),
-                    radius = 2000f
-                )
-            )
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize()
     ) {
+        val density = LocalDensity.current
+        val gradientCenter = with(density) {
+            Offset(maxWidth.toPx() * 0.85f, maxHeight.toPx() * 0.15f)
+        }
+        val gradientRadius = with(density) {
+            maxOf(maxWidth.toPx(), maxHeight.toPx()) * 1.2f
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0xFF1c1c1e), Color(0xFF0a0a0a)),
+                        center = gradientCenter,
+                        radius = gradientRadius
+                    )
+                )
+        ) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -118,6 +129,7 @@ fun WelcomeScreen(onFinished: () -> Unit) {
                 color = OnSurfaceVariant.copy(alpha = alpha),
                 textAlign = TextAlign.Center
             )
+        }
         }
     }
 }
