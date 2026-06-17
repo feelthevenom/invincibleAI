@@ -27,11 +27,14 @@ render.experimental.xml
 *.jks
 *.keystore
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
 # Android Profiling
 *.hprof
 
 # env
-.env.example
+*.env.example
+
+# Android Studio / IntelliJ files
+.idea/
+*.iml
+.gradle/
+local.properties

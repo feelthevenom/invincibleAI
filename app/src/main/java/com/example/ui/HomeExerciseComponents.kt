@@ -27,43 +27,15 @@ fun HomeSectionToggle(
     onDiet: () -> Unit,
     onExercise: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(12.dp))
-            .padding(4.dp)
-    ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (!selectedExercise) MaterialTheme.colorScheme.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
-                .clickable(onClick = onDiet)
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Diet",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (!selectedExercise) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
-            )
-        }
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (selectedExercise) MaterialTheme.colorScheme.surfaceContainerHigh else androidx.compose.ui.graphics.Color.Transparent)
-                .clickable(onClick = onExercise)
-                .padding(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Exercise",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (selectedExercise) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
-            )
-        }
-    }
+    AnimatedSegmentedControl(
+        options = listOf("Diet", "Exercise"),
+        selectedIndex = if (selectedExercise) 1 else 0,
+        onSelected = { index ->
+            if (index == 0) onDiet() else onExercise()
+        },
+        minButtonHeight = 48.dp,
+        labelStyle = MaterialTheme.typography.titleSmall
+    )
 }
 
 @Composable

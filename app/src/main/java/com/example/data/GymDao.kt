@@ -72,6 +72,21 @@ interface GymDao {
     @androidx.room.Delete
     suspend fun deleteCustomFood(food: CustomFoodItem)
 
+    @Query("SELECT * FROM cached_food_products ORDER BY createdAt DESC")
+    suspend fun getAllCachedFoodProducts(): List<CachedFoodProduct>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCachedFoodProduct(product: CachedFoodProduct): Long
+
+    @Query("SELECT * FROM cached_food_products WHERE externalId = :externalId LIMIT 1")
+    suspend fun getCachedFoodByExternalId(externalId: String): CachedFoodProduct?
+
+    @Query("SELECT * FROM food_image_cache WHERE normalizedName = :key LIMIT 1")
+    suspend fun getFoodImageCache(key: String): FoodImageCacheEntry?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertFoodImageCache(entry: FoodImageCacheEntry)
+
     @Query("SELECT * FROM workout_routines ORDER BY sortOrder ASC, createdAt ASC")
     fun getAllRoutines(): Flow<List<WorkoutRoutine>>
 
@@ -152,6 +167,15 @@ interface GymDao {
 
     @Query("DELETE FROM app_notifications WHERE id = :id")
     suspend fun deleteNotification(id: Int)
+
+    @Query("DELETE FROM app_notifications")
+    suspend fun clearAllNotifications()
+
+    @Query("DELETE FROM app_notifications WHERE category = :category")
+    suspend fun clearNotificationsByCategory(category: String)
+
+    @Query("DELETE FROM app_notifications WHERE category != :category")
+    suspend fun clearNotificationsExceptCategory(category: String)
 
     @Query("SELECT * FROM cached_exercise_guides WHERE lookupKey = :lookupKey LIMIT 1")
     suspend fun getCachedExerciseGuide(lookupKey: String): CachedExerciseGuide?

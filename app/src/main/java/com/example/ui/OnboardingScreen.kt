@@ -96,6 +96,7 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
     val weightItems = remember(weightRange) { weightKgItems(weightRange.first, weightRange.second) }
     var currentWeightIndex by remember(weightItems) { mutableIntStateOf(weightItems.indexOfFirst { it.startsWith("70 ") }.coerceAtLeast(0)) }
     var targetWeightIndex by remember(weightItems) { mutableIntStateOf(currentWeightIndex) }
+    var targetWeightCustomized by remember { mutableStateOf(false) }
 
     var dailyCalories by remember { mutableStateOf("") }
     var protein by remember { mutableStateOf("") }
@@ -171,6 +172,13 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         fiber = macros.fiber.toString()
     }
 
+    fun recalculateTargetWeight() {
+        val cw = currentWeightKg()
+        val calculated = FitnessCalculator.calculateTargetWeight(gender, heightCm(), cw, goal)
+        val idx = weightItems.indexOfFirst { it.startsWith("${calculated.toInt()} ") }
+        if (idx >= 0) targetWeightIndex = idx
+    }
+
     LaunchedEffect(goal, currentWeightIndex, targetWeightIndex, activityLevel, ageIndex, gender) {
         val cw = currentWeightKg()
         val items = weeklyChangeItems(
@@ -182,14 +190,13 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
         recalculateStep5Metrics()
     }
 
-    LaunchedEffect(step, goal, currentWeightIndex, targetWeightIndex, weeklyChangeIndex) {
+    LaunchedEffect(step, goal, currentWeightIndex, weeklyChangeIndex) {
         progress = step / totalSteps.toFloat()
         when (step) {
             3 -> {
-                val cw = currentWeightKg()
-                val calculated = FitnessCalculator.calculateTargetWeight(gender, heightCm(), cw, goal)
-                val idx = weightItems.indexOfFirst { it.startsWith("${calculated.toInt()} ") }
-                if (idx >= 0) targetWeightIndex = idx
+                if (!targetWeightCustomized) {
+                    recalculateTargetWeight()
+                }
             }
             4 -> {
                 val cw = currentWeightKg()
@@ -200,13 +207,6 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
             }
             5 -> recalculateStep5Metrics()
         }
-    }
-
-    fun recalculateTargetWeight() {
-        val cw = currentWeightKg()
-        val calculated = FitnessCalculator.calculateTargetWeight(gender, heightCm(), cw, goal)
-        val idx = weightItems.indexOfFirst { it.startsWith("${calculated.toInt()} ") }
-        if (idx >= 0) targetWeightIndex = idx
     }
 
     fun rebalanceMacro(field: FitnessCalculator.MacroField, newValue: Int) {
@@ -357,8 +357,36 @@ fun OnboardingScreenContent(onComplete: (UserProfile) -> Unit) {
                             Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    2 -> Step2Content(activityLevel, { activityLevel = it }, goal, { goal = it; recalculateTargetWeight() })
-                    3 -> Step3Pickers(weightItems, currentWeightIndex, { currentWeightIndex = it; recalculateTargetWeight() }, targetWeightIndex, { targetWeightIndex = it }, heightCm())
+                    2 -> Step2Content(activityLevel, { activityLevel = it }, goal, {
+                        goal = it
+                        targetWeightCustomized = false
+                        recalculateTargetWeight()
+                    })
+                    3 -> {
+                        val recommendedTarget = FitnessCalculator.calculateTargetWeight(
+                            gender, heightCm(), currentWeightKg(), goal
+                        )
+                        Step3Pickers(
+                            weightItems = weightItems,
+                            currentIndex = currentWeightIndex,
+                            onCurrentIndex = { idx ->
+                                currentWeightIndex = idx
+                                if (!targetWeightCustomized) recalculateTargetWeight()
+                            },
+                            targetIndex = targetWeightIndex,
+                            onTargetIndex = { idx ->
+                                targetWeightIndex = idx
+                                targetWeightCustomized = true
+                            },
+                            heightCm = heightCm(),
+                            recommendedTargetKg = recommendedTarget,
+                            targetCustomized = targetWeightCustomized,
+                            onUseRecommended = {
+                                targetWeightCustomized = false
+                                recalculateTargetWeight()
+                            }
+                        )
+                    }
                     4 -> Step5Pickers(goal, currentWeightKg(), weeklyChangeIndex, { weeklyChangeIndex = it; recalculateStep5Metrics() }, weeklyWarning, weeksToGoal, maintenanceCalories, calorieAdjustmentDaily, calorieAdjustmentWeekly, targetChangePerWeek, dailyCalories)
                     5 -> Step4Content(dailyCalories, { v -> dailyCalories = v; val cal = v.toIntOrNull(); val cw = currentWeightKg(); if (cal != null) { val m = FitnessCalculator.calculateMacros(cw, cal, goal); protein = m.protein.toString(); carbs = m.carbs.toString(); fat = m.fat.toString(); fiber = m.fiber.toString() } }, protein, { v -> rebalanceMacro(FitnessCalculator.MacroField.PROTEIN, v.toIntOrNull() ?: 0) }, carbs, { v -> rebalanceMacro(FitnessCalculator.MacroField.CARBS, v.toIntOrNull() ?: 0) }, fat, { v -> rebalanceMacro(FitnessCalculator.MacroField.FAT, v.toIntOrNull() ?: 0) }, fiber, { v -> rebalanceMacro(FitnessCalculator.MacroField.FIBER, v.toIntOrNull() ?: 0) })
                     6 -> Step6Cuisine(selectedCuisines, { selectedCuisines = it })
@@ -438,7 +466,10 @@ private fun Step3Pickers(
     weightItems: List<String>,
     currentIndex: Int, onCurrentIndex: (Int) -> Unit,
     targetIndex: Int, onTargetIndex: (Int) -> Unit,
-    heightCm: Int
+    heightCm: Int,
+    recommendedTargetKg: Float,
+    targetCustomized: Boolean,
+    onUseRecommended: () -> Unit
 ) {
     Text("Your weight goals", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
     Spacer(modifier = Modifier.height(8.dp))
@@ -447,6 +478,23 @@ private fun Step3Pickers(
     WheelPicker(items = weightItems, selectedIndex = currentIndex.coerceIn(0, weightItems.lastIndex), onSelected = onCurrentIndex, label = "Current Weight")
     Spacer(modifier = Modifier.height(16.dp))
     WheelPicker(items = weightItems, selectedIndex = targetIndex.coerceIn(0, weightItems.lastIndex), onSelected = onTargetIndex, label = "Target Weight")
+    Spacer(modifier = Modifier.height(8.dp))
+    if (targetCustomized) {
+        Text(
+            "Custom target selected",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = onUseRecommended) {
+            Text("Use recommended: ${recommendedTargetKg.toInt()} kg")
+        }
+    } else {
+        Text(
+            "Recommended target: ${recommendedTargetKg.toInt()} kg (based on your current weight and goal)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable

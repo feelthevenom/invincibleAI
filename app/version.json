@@ -1,7 +1,7 @@
 {
-  "versionCode": 4,
-  "versionName": "v1.0.1",
-  "apkUrl": "https://github.com/feelthevenom/invincibleAI/releases/download/v1.0.1/GymAI.apk",
+  "versionCode": 5,
+  "versionName": "v1.1.0",
+  "apkUrl": "https://github.com/feelthevenom/invincibleAI/releases/download/v1.1.0/GymAI.apk",
   "releaseNotes": "Alarm is fixed, Small theme update and Gif in Exercise tutorial is fixed",
   "minVersionCode": 1
 }

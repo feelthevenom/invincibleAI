@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.gymai.qxzpvw"
     minSdk = 24
     targetSdk = 37
-    versionCode = 4
-    versionName = "v1.0.1"
+    versionCode = 5
+    versionName = "v1.1.0"
 
     buildConfigField(
       "String",
@@ -55,6 +55,9 @@ android {
     compose = true
     buildConfig = true
   }
+  androidResources {
+    noCompress += listOf("gif")
+  }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
@@ -69,7 +72,6 @@ secrets {
 // This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
@@ -93,15 +95,16 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
   implementation("io.coil-kt:coil-gif:2.7.0")
+  implementation(libs.gson)
   implementation(libs.converter.moshi)
   implementation(libs.retrofit)
   implementation(libs.okhttp)
   implementation(libs.logging.interceptor)
   implementation(libs.generativeai)
   implementation(libs.litertlm.android)
+  implementation(libs.lottie.compose)
   implementation(libs.androidx.biometric)
   implementation(libs.androidx.security.crypto)
-  // implementation(libs.firebase.ai)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.moshi.kotlin)

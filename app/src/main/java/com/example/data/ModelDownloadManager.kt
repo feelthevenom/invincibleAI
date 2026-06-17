@@ -35,16 +35,16 @@ class ModelDownloadManager(
             return dir
         }
 
-    fun getTotalRamGb(): Double {
-        val actManager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        val memInfo = android.app.ActivityManager.MemoryInfo()
-        actManager.getMemoryInfo(memInfo)
-        return memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
-    }
+    fun getTotalRamGb(): Double = DeviceModelCapability.totalRamGb(appContext)
 
     fun isSystemCompatible(modelType: String): Boolean {
         val spec = OfflineModelConfig.specFor(modelType) ?: return false
         return getTotalRamGb() >= spec.minRamGb && Build.VERSION.SDK_INT >= 24
+    }
+
+    fun canImportFile(fileSizeBytes: Long, fileName: String): Pair<Boolean, String?> {
+        val assessment = DeviceModelCapability.assess(appContext, fileSizeBytes, fileName)
+        return assessment.canLoad to assessment.message
     }
 
     fun modelFile(modelType: String): File? = resolveModelFile(modelType)
@@ -103,7 +103,8 @@ class ModelDownloadManager(
                     OfflineModelConfig.isValidImportedFile(file.length())
             }
             ?.map { file ->
-                val cap = OfflineModelValidator.inferCapabilities(file.name, file.length())
+                val meta = OfflineModelMetadata.load(file)
+                val cap = OfflineModelValidator.inferCapabilities(file.name, file.length(), metadata = meta)
                 InstalledOfflineModel(
                     id = OfflineModelConfig.importedId(file.name),
                     displayName = cap.displayName,
@@ -298,14 +299,7 @@ class ModelDownloadManager(
                     temp.delete()
                     return@withContext DownloadStatus.Error(validation.message)
                 }
-                is OfflineModelValidator.ValidationResult.Valid -> {
-                    if (validation.capabilities.minRamGb > getTotalRamGb()) {
-                        temp.delete()
-                        return@withContext DownloadStatus.Error(
-                            "Device needs at least ${validation.capabilities.minRamGb} GB RAM for this model."
-                        )
-                    }
-                }
+                is OfflineModelValidator.ValidationResult.Valid -> Unit
             }
 
             if (dest.exists()) dest.delete()
@@ -356,7 +350,10 @@ class ModelDownloadManager(
             File(modelsDir, "${spec.fileName}.download").delete()
         }
         if (modelType.startsWith("imported:")) {
-            resolveModelFile(modelType)?.delete()
+            resolveModelFile(modelType)?.let { file ->
+                OfflineModelMetadata.delete(file)
+                file.delete()
+            }
         }
         File(modelsDir, "gemma-2b.bin").delete()
         File(modelsDir, "gemma-4b.bin").delete()

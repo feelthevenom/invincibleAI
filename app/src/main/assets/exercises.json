@@ -36,7 +36,6 @@
     {"id": "leg_curl", "name": "Leg Curl", "type": "Legs", "routines": ["Legs", "Lower"], "defaultSets": 3, "defaultReps": 12, "equipment": "machine", "secondaryMuscles": [], "aliases": ["hamstring curl", "lying leg curl"]},
     {"id": "walking_lunge", "name": "Walking Lunge", "type": "Legs", "routines": ["Legs", "Lower"], "defaultSets": 3, "defaultReps": 12, "equipment": "bodyweight", "secondaryMuscles": ["glutes", "hamstrings"], "aliases": ["lunges"]},
     {"id": "bulgarian_split_squat", "name": "Bulgarian Split Squat", "type": "Legs", "routines": ["Legs", "Lower"], "defaultSets": 3, "defaultReps": 10, "aliases": ["split squat"]},
-    {"id": "bulgarian_split_squat", "name": "Bulgarian Split Squat", "type": "Legs", "routines": ["Legs", "Lower"], "defaultSets": 3, "defaultReps": 10, "aliases": ["split squat"]},
     {"id": "calf_raise", "name": "Calf Raise", "type": "Legs", "routines": ["Legs", "Lower"], "defaultSets": 4, "defaultReps": 15, "equipment": "machine", "secondaryMuscles": [], "aliases": ["standing calf raise"]},
     {"id": "hip_thrust", "name": "Hip Thrust", "type": "Glutes", "routines": ["Legs", "Lower"], "defaultSets": 3, "defaultReps": 10, "aliases": ["barbell hip thrust"]},
     {"id": "glute_bridge", "name": "Glute Bridge", "type": "Glutes", "routines": ["Legs", "Lower", "Full Body"], "defaultSets": 3, "defaultReps": 12, "aliases": []},

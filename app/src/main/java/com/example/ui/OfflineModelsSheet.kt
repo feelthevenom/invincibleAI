@@ -1,6 +1,8 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 package com.example.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,9 +14,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.ModelDownloadManager
+
+private const val HF_LITERTLM_URL = "https://huggingface.co/models?library=litert-lm"
 
 @Composable
 fun OfflineModelsSettingCard(
@@ -44,7 +49,7 @@ fun OfflineModelsSettingCard(
             }
             Spacer(Modifier.height(10.dp))
             Text(
-                "Download, import, or remove on-device LiteRT-LM models for private Coach AI.",
+                "Download, import, or remove on-device LiteRT-LM models. Select the active model above in AI Settings.",
                 style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant
             )
@@ -72,13 +77,13 @@ fun OfflineModelsBottomSheet(
     builtInStates: Map<String, BuiltInModelUiState>,
     activeModelId: String?,
     onDismiss: () -> Unit,
-    onSelectModel: (String) -> Unit,
     onDownload: (String) -> Unit,
     onCancelDownload: (String) -> Unit,
     onDelete: (String) -> Unit,
     onImport: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -95,13 +100,13 @@ fun OfflineModelsBottomSheet(
                 .padding(bottom = 32.dp)
         ) {
             Text(
-                "Offline Models",
+                "Manage Offline Models",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             Text(
-                "Select a model for Coach AI. Vision-capable models support meal photo analysis.",
+                "Download or remove models here. Choose the active model in the On-device model picker above.",
                 style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -111,24 +116,22 @@ fun OfflineModelsBottomSheet(
                 val state = builtInStates[modelId] ?: BuiltInModelUiState()
                 val title = if (modelId == "offline_2b") "Gemma 4 E2B-it (~2.4 GB)" else "Gemma 4 E4B-it (~3.4 GB)"
                 val installed = state.isDownloaded
-                val selected = activeModelId == modelId && installed
-                OfflineModelSheetRow(
+                val isActive = activeModelId == modelId && installed
+                OfflineModelManageRow(
                     title = title,
-                    subtitle = "Text + Vision · ${if (modelId == "offline_2b") "4 GB" else "5 GB"} RAM min",
+                    subtitle = "Text + Vision · ${if (modelId == "offline_2b") "4 GB" else "5.5 GB"} RAM min",
                     status = when {
                         state.isDownloading -> "Downloading…"
-                        installed && selected -> "Ready · Active"
-                        installed -> "Ready"
-                        state.isCompatible -> "Tap download"
-                        else -> "Needs more RAM"
+                        installed && isActive -> "Installed · Currently active"
+                        installed -> "Installed"
+                        state.isCompatible -> "Not installed — tap download"
+                        else -> "Device RAM too low for this model"
                     },
-                    isSelected = selected,
                     isDownloading = state.isDownloading,
                     progress = state.progress,
                     showDownload = !installed && !state.isDownloading && state.isCompatible,
-                    showDelete = installed,
+                    showDelete = installed && !state.isDownloading,
                     showCancel = state.isDownloading,
-                    onSelect = { if (installed) onSelectModel(modelId) },
                     onDownload = { onDownload(modelId) },
                     onDelete = { onDelete(modelId) },
                     onCancel = { onCancelDownload(modelId) }
@@ -136,18 +139,16 @@ fun OfflineModelsBottomSheet(
             }
 
             installedModels.filter { !it.isBuiltIn }.forEach { model ->
-                val selected = activeModelId == model.id
-                OfflineModelSheetRow(
+                val isActive = activeModelId == model.id
+                OfflineModelManageRow(
                     title = model.displayName,
                     subtitle = "${model.capabilityLabel} · ${model.minRamGb} GB RAM min · Imported",
-                    status = if (selected) "Ready · Active" else "Ready",
-                    isSelected = selected,
+                    status = if (isActive) "Imported · Currently active" else "Imported",
                     isDownloading = false,
                     progress = 0f,
                     showDownload = false,
                     showDelete = true,
                     showCancel = false,
-                    onSelect = { onSelectModel(model.id) },
                     onDownload = {},
                     onDelete = { onDelete(model.id) },
                     onCancel = {}
@@ -159,6 +160,19 @@ fun OfflineModelsBottomSheet(
                 Icon(Icons.Default.FileUpload, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Import .litertlm model")
+            }
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(HF_LITERTLM_URL))
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Browse LiteRT-LM models on Hugging Face")
             }
         }
     }
@@ -172,29 +186,26 @@ data class BuiltInModelUiState(
 )
 
 @Composable
-private fun OfflineModelSheetRow(
+private fun OfflineModelManageRow(
     title: String,
     subtitle: String,
     status: String,
-    isSelected: Boolean,
     isDownloading: Boolean,
     progress: Float,
     showDownload: Boolean,
     showDelete: Boolean,
     showCancel: Boolean,
-    onSelect: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     onCancel: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     Surface(
-        onClick = onSelect,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
         shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) cs.primary else cs.surfaceContainer
+        color = cs.surfaceContainer
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -203,43 +214,41 @@ private fun OfflineModelSheetRow(
                         title,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isSelected) cs.onPrimary else cs.onSurface
+                        color = cs.onSurface
                     )
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) cs.onPrimary.copy(0.85f) else cs.onSurfaceVariant
+                        color = cs.onSurfaceVariant
                     )
                 }
-                if (isSelected) {
-                    Icon(Icons.Default.Check, null, tint = cs.onPrimary)
-                } else if (showCancel) {
-                    IconButton(onClick = onCancel) {
-                        Icon(Icons.Default.Close, "Cancel download", tint = cs.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (showCancel) {
+                        IconButton(onClick = onCancel) {
+                            Icon(Icons.Default.Close, "Cancel download", tint = cs.onSurfaceVariant)
+                        }
                     }
-                } else if (showDownload) {
-                    IconButton(onClick = onDownload) {
-                        Icon(Icons.Default.Download, "Download", tint = cs.primary)
+                    if (showDownload) {
+                        IconButton(onClick = onDownload) {
+                            Icon(Icons.Default.Download, "Download", tint = cs.primary)
+                        }
                     }
-                } else if (showDelete) {
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, "Delete", tint = cs.error)
+                    if (showDelete) {
+                        IconButton(onClick = onDelete) {
+                            Icon(Icons.Default.Delete, "Delete", tint = cs.error)
+                        }
                     }
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Text(
-                status,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isSelected) cs.onPrimary.copy(0.9f) else cs.secondary
-            )
+            Text(status, style = MaterialTheme.typography.labelMedium, color = cs.secondary)
             if (isDownloading) {
                 Spacer(Modifier.height(8.dp))
                 GymModelDownloadProgress(progress = progress)
                 Text(
                     "${(progress * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isSelected) cs.onPrimary else cs.onSurfaceVariant,
+                    color = cs.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.End)
                 )
             }

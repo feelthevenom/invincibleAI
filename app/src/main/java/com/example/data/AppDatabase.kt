@@ -11,9 +11,11 @@ import androidx.room.RoomDatabase
         CustomExercise::class, ProgressPhoto::class, WorkoutRoutine::class, RoutineExercise::class,
         WaterLog::class, WeightLog::class, BodyMeasurementLog::class,
         DailyGoalSnapshot::class, AppNotification::class,
-        CachedExerciseGuide::class, CoachChatHistoryEntity::class
+        CachedExerciseGuide::class, CoachChatHistoryEntity::class,
+        CachedFoodProduct::class,
+        FoodImageCacheEntry::class
     ],
-    version = 26,
+    version = 37,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

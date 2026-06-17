@@ -12,7 +12,18 @@ class SecureStorageManager(context: Context) {
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        EncryptedSharedPreferences.create(
+        try {
+            createEncryptedPrefs(context, masterKey)
+        } catch (_: Exception) {
+            // Known issue: EncryptedSharedPreferences can crash if KeyStore state is inconsistent
+            // especially after clear data/fresh install where keys might persist but pref file is gone/corrupted.
+            context.deleteSharedPreferences("secret_ai_prefs")
+            createEncryptedPrefs(context, masterKey)
+        }
+    }
+
+    private fun createEncryptedPrefs(context: Context, masterKey: MasterKey): SharedPreferences {
+        return EncryptedSharedPreferences.create(
             context,
             "secret_ai_prefs",
             masterKey,

@@ -59,17 +59,26 @@ fun NotificationHistoryScreen(viewModel: GymViewModel, onBack: () -> Unit) {
         containerColor = cs.background
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            PrimaryTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = cs.surfaceContainerLow,
-                contentColor = cs.primary
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title, style = MaterialTheme.typography.labelLarge) }
-                    )
+            AnimatedSegmentedControl(
+                options = tabs,
+                selectedIndex = selectedTab,
+                onSelected = { selectedTab = it },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+            if (filtered.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { viewModel.clearNotifications(selectedTab) }) {
+                        Text(
+                            "Clear all",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = cs.error
+                        )
+                    }
                 }
             }
             if (filtered.isEmpty()) {
